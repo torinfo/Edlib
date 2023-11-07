@@ -32,7 +32,6 @@ use App\Libraries\H5P\Interfaces\H5PAdapterInterface;
 use App\Libraries\H5P\Interfaces\H5PAudioInterface;
 use App\Libraries\H5P\Interfaces\H5PImageAdapterInterface;
 use App\Libraries\H5P\Interfaces\H5PVideoInterface;
-use App\Libraries\H5P\LtiToH5PLanguage;
 use App\Libraries\H5P\Storage\H5PCerpusStorage;
 use App\Lti\Lti;
 use App\SessionKeys;
@@ -146,10 +145,6 @@ class H5PController extends Controller
         Log::info("Create H5P, user: " . Session::get('authId', 'not-logged-in-user'));
 
         $language = $this->getTargetLanguage(Session::get('locale') ?? config("h5p.default-resource-language"));
-        try {
-            $language = Iso639p3::code($language);
-        } catch (Exception) {
-        }
 
         $editorConfig = (app(H5PCreateConfig::class))
             ->setUserId(Session::get('authId', false))
@@ -200,7 +195,7 @@ class H5PController extends Controller
                 'license' => License::getDefaultLicense(),
                 'isPublished' => false,
                 'share' => config('h5p.defaultShareSetting'),
-                'language_iso_639_3' => $language,
+                'language_iso_639_3' => Iso639p3::code3letters($language), // Edlib language selector
                 'redirectToken' => $request->get('redirectToken'),
                 'route' => route('h5p.store'),
                 '_method' => "POST",
@@ -249,7 +244,7 @@ class H5PController extends Controller
             ->setUserEmail(Session::get('email', false))
             ->setUserName(Session::get('name', false))
             ->setRedirectToken($request->input('redirectToken'))
-            ->setLanguage(LtiToH5PLanguage::convert(Session::get('locale')))
+            ->setLanguage(Iso639p3::code2letters(Session::get('locale')))
             ->loadContent($id);
 
         $h5pView = $this->h5p->createView($editorConfig);
@@ -330,7 +325,7 @@ class H5PController extends Controller
             'library' => $library->getLibraryString(false),
             'libraryid' => $h5pContent->library_id,
             'parameters' => $params,
-            'language_iso_639_3' => $contentLanguage,
+            'language_iso_639_3' => $contentLanguage, // Edlib language selector
             'isNewLanguageVariant' => $isNewLanguageVariant,
             'title' => $h5pContent->title,
             'license' => $h5pContent->license ?: License::getDefaultLicense(),

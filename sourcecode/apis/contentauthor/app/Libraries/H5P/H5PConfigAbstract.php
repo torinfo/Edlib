@@ -67,7 +67,7 @@ abstract class H5PConfigAbstract implements ConfigInterface
             'crossorigin' => config('h5p.crossOrigin'),
             'crossoriginRegex' => config('h5p.crossOriginRegexp'),
             'locale' => $locale,
-            'localeConverted' => LtiToH5PLanguage::convert($locale),
+            'localeConverted' => Iso639p3::code2letters($locale),
             'pluginCacheBuster' => '?v=' . self::CACHE_BUSTER_STRING,
             'libraryUrl' => url('/h5p-php-library/js'),
         ];
@@ -156,6 +156,9 @@ abstract class H5PConfigAbstract implements ConfigInterface
         return $this->content;
     }
 
+    /**
+     * H5P Content language and content type translation
+     */
     public function setLanguage(?string $languageCode): static
     {
         $this->language = $languageCode;
