@@ -9,7 +9,7 @@ const loadLocale = async (locale) => {
         return {locale: 'en', messages: defaultMessages};
     }
 
-  if (locale.includes('_')) {
+    if (locale.includes('_')) {
         locale = locale.replace('_', '-');
     }
 
