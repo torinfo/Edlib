@@ -33,6 +33,10 @@ class H5PControllerTest extends TestCase
     /** @dataProvider provider_testCreate */
     public function testCreate(string $adapterMode, ?string $contentType): void
     {
+        config([
+            "h5p.default-resource-language" => 'fi',
+        ]);
+
         $faker = Factory::create();
         $this->session([
             'authId' => $faker->uuid(),
@@ -79,7 +83,7 @@ class H5PControllerTest extends TestCase
         $this->assertSame('nb-no', $config['locale']);
         $this->assertSame('nb', $config['localeConverted']);
         $this->assertSame('nb', $config['editor']['language']);
-        $this->assertSame('en', $config['editor']['defaultLanguage']);
+        $this->assertSame('fi', $config['editor']['defaultLanguage']);
 
         $this->assertNotEmpty($config['core']['scripts']);
         $this->assertNotEmpty($config['core']['styles']);
@@ -123,6 +127,9 @@ class H5PControllerTest extends TestCase
     /** @dataProvider provider_adapterMode */
     public function testEdit(string $adapterMode): void
     {
+        config([
+            "h5p.default-resource-language" => 'fi',
+        ]);
         Session::put('adapterMode', $adapterMode);
         $faker = Factory::create();
         $user = new User(42, 'Emily', 'Quackfaster', 'emily.quackfaster@duckburg.quack');
@@ -200,7 +207,7 @@ class H5PControllerTest extends TestCase
         $this->assertSame('nn-no', $config['locale']);
         $this->assertSame('nn', $config['localeConverted']);
         $this->assertSame('nn', $config['editor']['language']);
-        $this->assertSame('en', $config['editor']['defaultLanguage']);
+        $this->assertSame('fi', $config['editor']['defaultLanguage']);
 
         $this->assertNotEmpty($config['core']['scripts']);
         $this->assertNotEmpty($config['core']['styles']);
