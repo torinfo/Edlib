@@ -43,7 +43,6 @@ class H5PControllerTest extends TestCase
         config([
             "h5p.default-resource-language" => 'fi',
         ]);
-        $faker = Factory::create();
 
         $this->session([
             'authId' => $this->faker->uuid(),
@@ -87,7 +86,7 @@ class H5PControllerTest extends TestCase
             $this->assertFalse($config['hubIsEnabled']);
         }
         $this->assertEmpty($config['contents']);
-        $this->assertSame('nb-no', $config['locale']);
+        $this->assertSame('nb', $config['locale']);
         $this->assertSame('nb', $config['localeConverted']);
         $this->assertSame('nb', $config['editor']['language']);
         $this->assertSame('fi', $config['editor']['defaultLanguage']);
@@ -211,7 +210,7 @@ class H5PControllerTest extends TestCase
         $this->assertFalse($config['canGiveScore']);
         $this->assertFalse($config['hubIsEnabled']);
         $this->assertEmpty($config['contents']);
-        $this->assertSame('nn-no', $config['locale']);
+        $this->assertSame('nn', $config['locale']);
         $this->assertSame('nn', $config['localeConverted']);
         $this->assertSame('nn', $config['editor']['language']);
         $this->assertSame('fi', $config['editor']['defaultLanguage']);
