@@ -47,16 +47,6 @@ class LtiPlatform extends Model
         'deleting' => LtiPlatformDeleting::class,
     ];
 
-    /**
-     * @return BelongsToMany<Context, $this>
-     */
-    public function contexts(): BelongsToMany
-    {
-        return $this->belongsToMany(Context::class, 'lti_platform_context')
-            ->withPivot('role')
-            ->using(ContextPivot::class);
-    }
-
     protected static function booted(): void
     {
         static::creating(function (self $ltiPlatform): void {
@@ -69,6 +59,15 @@ class LtiPlatform extends Model
                 app()->make(Randomizer::class)->getBytes(24)
             );
         });
+    }
+
+    /**
+     * @return BelongsToMany<Context, $this>
+     */
+    public function contexts(): BelongsToMany
+    {
+        return $this->belongsToMany(Context::class, 'lti_platform_context')
+            ->using(ContentContextPivot::class);
     }
 
     public function getOauth1Credentials(): Credentials

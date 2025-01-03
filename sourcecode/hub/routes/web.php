@@ -278,6 +278,16 @@ Route::middleware('can:admin')->prefix('/admin')->group(function () {
             ->name('admin.lti-platforms.edit')
             ->can('edit', ['platform']);
 
+        Route::get('/{platform}/contexts')
+            ->uses([LtiPlatformController::class, 'contexts'])
+            ->name('admin.lti-platforms.contexts')
+            ->can('edit', ['platform']);
+
+        Route::put('/{platform}/contexts')
+            ->uses([LtiPlatformController::class, 'addContext'])
+            ->name('admin.lti-platforms.add-context')
+            ->can('edit', ['platform']);
+
         Route::patch('/{platform}')
             ->uses([LtiPlatformController::class, 'update'])
             ->name('admin.lti-platforms.update')

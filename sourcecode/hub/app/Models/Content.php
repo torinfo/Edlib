@@ -294,7 +294,7 @@ class Content extends Model
     {
         return $this->belongsToMany(Context::class)
             ->withPivot('role')
-            ->using(ContextPivot::class);
+            ->using(ContentContextPivot::class);
     }
 
     public function hasUser(User $user): bool

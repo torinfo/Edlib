@@ -28,7 +28,6 @@ return new class () extends Migration {
         Schema::create('lti_platform_context', function (Blueprint $table) {
             $table->ulid('lti_platform_id');
             $table->ulid('context_id');
-            $table->string('role');
 
             $table->foreign('lti_platform_id')->references('id')->on('lti_platforms');
             $table->foreign('context_id')->references('id')->on('contexts');

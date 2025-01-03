@@ -7,7 +7,7 @@ namespace App\Models;
 use App\Enums\ContentRole;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 
-class ContextPivot extends Pivot
+class ContentContextPivot extends Pivot
 {
     protected $casts = [
         'role' => ContentRole::class,

@@ -230,5 +230,8 @@ return [
     'add-context' => 'Add context',
     'no-available-contexts-to-add' => 'There are no available contexts to add.',
     'context-added-to-content' => 'The context was added to the content.',
+    'context-added-to-lti-platform' => 'The context was added to the LTI platform.',
     'context-removed-from-content' => 'The content was removed from the content.',
+    'edit-lti-platform' => 'Edit LTI platform',
+    'contexts-for-lti-platform' => 'Contexts for LTI platform ":platform"',
 ];

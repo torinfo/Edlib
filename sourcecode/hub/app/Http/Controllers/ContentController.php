@@ -147,8 +147,7 @@ class ContentController extends Controller
 
     public function roles(Content $content): View
     {
-        // TODO: fix annoying phpstan error
-        //@phpstan-ignore-next-line
+        // @phpstan-ignore larastan.noUnnecessaryCollectionCall
         $availableContexts = Context::all()
             ->diff($content->contexts)
             ->mapWithKeys(fn (Context $context) => [$context->id => $context->name]);
