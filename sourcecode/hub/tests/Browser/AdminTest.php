@@ -274,24 +274,29 @@ final class AdminTest extends DuskTestCase
         $context = Context::factory()->name('ndla_users')->create();
         $user = User::factory()->admin()->create();
 
-        $this->browse(fn (Browser $browser) => $browser
-            ->loginAs($user->email)
-            ->assertAuthenticated()
-            ->visit('/admin')
-            ->clickLink('Manage LTI platforms')
-            ->within(new LtiPlatformCard(), fn (Browser $card) => $card
-                ->assertSeeIn('@context-count', '0')
-                ->clickLink('Contexts')
-            )
+        $this->browse(
+            fn (Browser $browser) => $browser
+                ->loginAs($user->email)
+                ->assertAuthenticated()
+                ->visit('/admin')
+                ->clickLink('Manage LTI platforms')
+                ->within(
+                    new LtiPlatformCard(),
+                    fn (Browser $card) => $card
+                        ->assertSeeIn('@context-count', '0')
+                        ->clickLink('Contexts')
+                )
             // Dusk does not support selecting by the choice's label
-            ->select('context', $context->id)
-            ->press('Add')
-            ->assertSee('The context was added to the LTI platform')
-            ->visit('/admin')
-            ->clickLink('Manage LTI platforms')
-            ->within(new LtiPlatformCard(), fn (Browser $card) => $card
-                ->assertSeeIn('@context-count', '1')
-            )
+                ->select('context', $context->id)
+                ->press('Add')
+                ->assertSee('The context was added to the LTI platform')
+                ->visit('/admin')
+                ->clickLink('Manage LTI platforms')
+                ->within(
+                    new LtiPlatformCard(),
+                    fn (Browser $card) => $card
+                        ->assertSeeIn('@context-count', '1')
+                )
         );
     }
 }
