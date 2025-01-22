@@ -22,6 +22,7 @@ use Illuminate\Routing\UrlGenerator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Vite;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Scout\Console\DeleteIndexCommand;
 use Laravel\Scout\Console\ImportCommand;
@@ -135,5 +136,15 @@ class AppServiceProvider extends ServiceProvider
             SyncIndexSettingsCommand::class,
             ImportCommand::class,
         ]);
+
+	$force_https = getenv('FORCE_HTTPS');
+	if ($force_https !== null && ($force_https === 'true' || $force_https === true))
+	{ 
+	   // generated urls will use https
+           URL::forceScheme('https');
+
+           // signing urls keep working 
+           $this->app['request']->server->set('HTTPS', true);
+	}
     }
 }
