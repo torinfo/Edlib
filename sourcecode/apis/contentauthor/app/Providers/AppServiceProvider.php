@@ -17,6 +17,8 @@ use Illuminate\Log\Logger;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
+
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -33,6 +35,16 @@ class AppServiceProvider extends ServiceProvider
         ContentVersion::observe(ContentVersionsObserver::class);
 
         TrimStrings::skipWhen(fn (Request $request) => $request->has('lti_message_type'));
+
+        $force_https = getenv('FORCE_HTTPS');
+        if ($force_https !== null && ($force_https === 'true' || $force_https === true))
+        {
+           // generated urls will use https
+           URL::forceScheme('https');
+
+           // signing urls keep working
+           $this->app['request']->server->set('HTTPS', true);
+        }
     }
 
     /**
