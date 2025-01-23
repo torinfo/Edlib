@@ -200,27 +200,27 @@ edlib.domain.com/ca
 
 The following components are needed:
 
--   PHP 8.2
+-   PHP 8.3
 -   MySQL/MariaDB v11
 -   Redis v7
 -   S3 file hosting (optional)
 
-#### PHP 8.2
+#### PHP 8.3
 
-We're going to install PHP 8.2, and use apache2 with mpm_event and fpm
-to host it. Included within the setup of PHP 8.2 is installing the
+We're going to install PHP 8.3, and use apache2 with mpm_event and fpm
+to host it. Included within the setup of PHP 8.3 is installing the
 actual PHP code, and setting up the necessary libraries (using
 composer).
 
-1\. Add ppa for PHP8.2
+1\. Add ppa for PHP8.3
 
 `add-apt-repository ppa:ondrej/php`
 
-2\. Install php8.2, including php8.2-fpm, composer and apache2
+2\. Install php8.3, including php8.3-fpm, composer and apache2
 
-`apt install php8.2 php8.2-fpm composer apache2`
+`apt install php8.3 php8.3-fpm composer apache2`
 
-3\. Configure apache2 to use php8.2-fpm and mdm_event engine
+3\. Configure apache2 to use php8.3-fpm and mdm_event engine
 
 `a2dismod mpm_worker`  
 `a2dismod php8.1`
@@ -230,19 +230,19 @@ configuration
 
 `a2disconf php8.1-fpm`
 
-Enable php8.2
+Enable php8.3
 
 `a2enmod proxy_fcgi setenvif`  
-`a2enconf php8.2-fpm`
+`a2enconf php8.3-fpm`
 
 As laravel php also uses the cli version of php for the php artisan
-commands, make sure that cli is also version 8.2:
+commands, make sure that cli is also version 8.3:
 
-`sudo update-alternatives --set php /usr/bin/php8.2 `  
-`sudo update-alternatives --set phar /usr/bin/phar8.2 `  
-`sudo update-alternatives --set phar.phar /usr/bin/phar.phar8.2 `  
-`sudo update-alternatives --set phpize /usr/bin/phpize8.2 `  
-`sudo update-alternatives --set php-config /usr/bin/php-config8.2 `
+`sudo update-alternatives --set php /usr/bin/php8.3 `  
+`sudo update-alternatives --set phar /usr/bin/phar8.3 `  
+`sudo update-alternatives --set phar.phar /usr/bin/phar.phar8.3 `  
+`sudo update-alternatives --set phpize /usr/bin/phpize8.3 `  
+`sudo update-alternatives --set php-config /usr/bin/php-config8.3 `
 
 4\. Get Edlib3 from git, and make the ca (and only the ca) available in
 /var/www/html
@@ -356,7 +356,7 @@ Step 3. Set the following ENVIRONMENT variables based on the
 
 `APP_URL=ihttps://edlib.domain.com`  
 `CACHE_DRIVER=redis`  
-`CONTENTAUTHOR_HOST=`[`https://edlib.domian.com/ca`](https://edlib.domian.com/ca)  
+`CONTENTAUTHOR_HOST=`[`https://caedlib.domian.com`](https://ca.edlib.domian.com)  
 `CONTENTAUTHOR_KEY=h5p`  
 `CONTENTAUTHOR_SECRET=secret2`  
 `DB_HOST=127.0.0.1`  
@@ -610,7 +610,7 @@ Step 2. Create new APP_KEY
 Step 3. Set the following ENVIRONMENT variables based on the
 [docker-compose.yml](https://github.com/cerpus/edlib-docker-example/blob/master/docker-compose.yml)
 
-`APP_URL=`[`https://edlib.domain.com/ca`](https://edlib.domain.com/ca)  
+`APP_URL=`[`https://ca.edlib.domain.com`](https://ca.edlib.domain.com)  
 `CACHE_DRIVER=redis`  
 `DB_HOST=127.0.0.1`  
 `DB_DATABASE=edlib3_ca`  
@@ -768,7 +768,11 @@ The follwoing errors are emitted. To be sorted later
 `     Validating h5p package failed.`  
 `  - H5P.TwitterUserFeed: Not found in cache, skipping`
 
-Step 6. Enable scheduler Set the following crontab for the apache user
+Step 6. Create proper symlinks
+The contantauthor also needs proper symlinks into the public fiolder. You can create those using php artisisan storage:link. It will creaet 3 symbolic links.
+`php artisan storage:link` 
+
+Step 7. Enable scheduler Set the following crontab for the apache user
 
 `crontab -u www-data -e`
 
@@ -776,7 +780,7 @@ Set the following entry:
 
 `* * * * * cd /var/www/html; php artisan schedule:run > /dev/null 2>&1`
 
-Step 7. Set up Queue worker using supervisor Install supervisor
+Step 8. Set up Queue worker using supervisor Install supervisor
 
 `sudo apt-get install supervisor`
 
@@ -799,7 +803,7 @@ laravel-worker.conf file that starts and monitors queue:work processes:
 `stdout_logfile=/var/www/html/storage/logs/worker.log`  
 `stopwaitsecs=3600`
 
-Step 8. Configure apache2 Set up the following apache2 virtual host file
+Step 9. Configure apache2 Set up the following apache2 virtual host file
 and make sure the document root is the public folder of the application.
 Also, include the configuration of the .htaccess file in the public
 folder in the configuration of the virtual host instead of relying on
@@ -815,10 +819,10 @@ the .htaccess file.
 `       # However, you must set it for any further virtual host explicitly.`  
 `       #ServerName www.example.com`  
   
-`       ServerName edlib.domain.com`  
+`       ServerName ca.edlib.domain.com`  
   
 `       ServerAdmin webmaster@domain.com`  
-`       DocumentRoot /var/www/html/ca/public`  
+`       DocumentRoot /var/www/html/public`  
   
 `       # Available loglevels: trace8, ..., trace1, debug, info, notice, warn,`  
 `       # error, crit, alert, emerg.`  
@@ -829,7 +833,7 @@ the .htaccess file.
 `          Options -Indexes +FollowSymLinks`  
 `       `</Directory>  
   
-`       `<Directory /var/www/html/ca/public>  
+`       `<Directory /var/www/html/public>  
 `          Options -Indexes +FollowSymLinks`  
 `          AllowOverride None`  
 `          Require all granted`  
@@ -866,10 +870,10 @@ public, by placing a symbolic link
 
 `ln -sf ../.env`
 
-Step 9. Install and build the required Node.js packages Install using
+Step 10. Install and build the required Node.js packages Install using
 npm
 
-`cd /var/www/html/conmtentauthor`  
+`cd /var/www/html/`  
 `npm install`
 
 Build
