@@ -2,7 +2,7 @@
     <x-slot:title>{{ trans('messages.log-in') }}</x-slot:title>
 
     <div class="row gx-0 gy-5">
-        @if ($has_google || $has_facebook || $has_auth0)
+        @if ($has_google || $has_facebook || $has_auth0 || $has_klascement)
             <div class="d-flex flex-column gap-3 col-lg-5">
                 <h2 class="fs-5 mb-3">{{ trans('messages.log-in-using') }}</h2>
 
@@ -38,10 +38,20 @@
                         {{ trans('messages.log-in-auth0') }}
                     </a>
                 @endif
+                @if ($has_klascement)
+                    <a
+                        href="{{ route('social.login', ['klascement']) }}"
+                        class="btn btn-secondary d-flex gap-2 justify-content-center"
+                        aria-label="{{ trans('messages.log-in-with-klascement') }}"
+                    >
+                        <x-icon name="door-open-fill" /> {{-- TODO: real auth0 icon --}}
+                        {{ trans('messages.log-in-klascement') }}
+                    </a>
+                @endif
             </div>
         @endif
 
-        @if ($has_google || $has_facebook || $has_auth0)
+        @if ($has_google || $has_facebook || $has_auth0 || $has_klascement)
             <div class="col-lg-2 d-flex d-column justify-content-center align-items-center" aria-hidden="true">
                 {{ trans('messages.or') }}
             </div>
