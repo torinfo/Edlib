@@ -1,6 +1,6 @@
 # Edlib3
 
-Edlib3 consitsts (at the moment of this writing of 2 major components:
+Edlib3 consitsts (at the moment of this writing) of 2 major components:
 
 -   Hub
 -   Content Author
