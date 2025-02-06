@@ -589,6 +589,10 @@ Now we can force HTTPS by setting the following in the .env file:
 
 `FORCE_HTTPS=true`
 
+Step 12. Need an extra symbolic link We discovered that some images were not found and these should have been in https://edlib.domain.com/storage/uploads but I could not find that folder. After inspaction of the docker container it turns out that the storage folder inside the public folder is actually a symbolic link to the storage/app/public folder in the root of the php application. So ither make the symbolic link, or add an alias to the apache virtual host file.
+`cd /var/www/html/public`
+`ln -sf ../storage/app/public storage`
+
 ### Content Author
 
 As with the hub we're basing our configuration on the
@@ -879,3 +883,13 @@ npm
 Build
 
 `npm run production`
+
+# Usermanageent
+
+## Create admin users
+In an SSH window of the Hub, run the following command to add an admin user
+`php artisan edlib:create-admin-user <email>`
+
+## Normal users
+Either enable self registration in the .env file of the hub or enable an SSO service for people to regsiter themselves
+
