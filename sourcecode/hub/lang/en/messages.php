@@ -14,6 +14,8 @@ return [
     'log-in-with-facebook' => 'Continue with Facebook',
     'log-in-auth0' => 'Auth0',
     'log-in-with-auth0' => 'Continue with Auth0',
+    'log-in-klascement' => 'KlasCement',
+    'log-in-with-klascement' => 'Continue with KlasCement',
     'or' => 'or…',
     'log-out' => 'Log out',
     'forgot-password' => 'I forgot my password',

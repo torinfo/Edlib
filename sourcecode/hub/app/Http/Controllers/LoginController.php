@@ -23,6 +23,7 @@ final class LoginController extends Controller
             'has_google' => (bool) config('services.google.client_id'),
             'has_facebook' => (bool) config('services.facebook.client_id'),
             'has_auth0' => (bool) config('services.auth0.client_id'),
+            'has_klascement' => (bool) config('services.klascement.client_id'),
         ]);
     }
 

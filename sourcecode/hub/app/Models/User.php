@@ -30,6 +30,7 @@ class User extends Model implements AuthenticatableContract
         'auth0',
         'facebook',
         'google',
+	'klascement', 
     ];
 
     protected $casts = [

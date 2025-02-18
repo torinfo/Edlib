@@ -1,0 +1,22 @@
+{
+    "name": "socialiteproviders/klascement",
+    "description": "KlasCement OAuth2 Provider for Laravel Socialite",
+    "license": "MIT",
+    "version": "1.0",
+    "authors": [
+        {
+            "name": "Tom Reijnders",
+            "email": "tom.reijnders@dlearning.nl"
+        }
+    ],
+    "require": {
+        "php": "^8.0",
+        "ext-json": "*",
+        "socialiteproviders/manager": "^4.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "SocialiteProviders\\KlasCement\\": ""
+        }
+    }
+}

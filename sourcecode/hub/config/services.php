@@ -40,6 +40,12 @@ return [
         'base_url' => env('AUTH0_BASE_URL'),
     ],
 
+    'klascement' => [
+        'client_id' => env('KLASCEMENT_CLIENT_ID'),
+        'client_secret' => env('KLASCEMENT_CLIENT_SECRET'),
+        'redirect' => '/klascement/callback',
+    ],
+
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
