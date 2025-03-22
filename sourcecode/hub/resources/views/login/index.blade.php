@@ -51,12 +51,13 @@
             </div>
         @endif
 
-        @if ($has_google || $has_facebook || $has_auth0 || $has_klascement)
+        @if ($has_google || $has_facebook || $has_auth0)
             <div class="col-lg-2 d-flex d-column justify-content-center align-items-center" aria-hidden="true">
                 {{ trans('messages.or') }}
             </div>
         @endif
 
+	@if (! $has_klascement)
         <x-form action="{{ route('login_check') }}" class="col-lg-5">
             <h2 class="fs-5 mb-3">{{ trans('messages.log-in-with-email-and-password') }}</h2>
 
@@ -92,5 +93,6 @@
                 </p>
             @endcan
         </x-form>
+        @endif
     </div>
 </x-layout>
