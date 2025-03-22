@@ -2,6 +2,8 @@
 
 namespace App;
 
+use App\Events\H5pContentDeleted;
+use App\Events\H5pContentUpdated;
 use App\Http\Libraries\H5PFileVersioner;
 use App\Libraries\H5P\Dataobjects\H5PMetadataObject;
 use App\Libraries\H5P\H5PLibraryAdmin;
@@ -57,15 +59,18 @@ class H5PContent extends Content implements VersionableObject
 
     protected $guarded = [
         'user_id',
-        'is_private',
         'version_id',
         'library_id',
     ];
 
     protected $casts = [
         'library_id' => "int",
-        'is_published' => 'boolean',
         'is_draft' => 'boolean',
+    ];
+
+    protected $dispatchesEvents = [
+        'updated' => H5pContentUpdated::class,
+        'deleted' => H5pContentDeleted::class,
     ];
 
     /**
@@ -299,7 +304,7 @@ class H5PContent extends Content implements VersionableObject
     // Overrides Method from trait
     public function getPublicId(): string
     {
-        return "h5p-".$this->id;
+        return "h5p-" . $this->id;
     }
 
     public function getMaxScore(): int|null
@@ -331,6 +336,16 @@ class H5PContent extends Content implements VersionableObject
     public function getMachineName(): string
     {
         return $this->library()->firstOrFail()->name;
+    }
+
+    public function getCopyrightCacheKey(): string
+    {
+        return 'h5p-copyright-' . $this->id;
+    }
+
+    public function getInfoCacheKey(): string
+    {
+        return 'h5p-info-' . $this->id;
     }
 
     protected function getIconUrl(): string

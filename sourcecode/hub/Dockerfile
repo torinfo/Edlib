@@ -98,8 +98,10 @@ RUN set -eux; \
 
 VOLUME /app/storage
 
+COPY docker/php/fpm-prod.conf "/usr/local/etc/php-fpm.d/zz-fpm-prod.conf"
 
-FROM prod as test
+
+FROM prod AS test
 
 COPY phpunit.xml .env.testing .
 COPY tests tests
@@ -128,8 +130,9 @@ RUN set -eux; \
         xdebug \
     ;
 
-COPY docker/php/docker-entrypoint-dev.sh /docker-entrypoint-dev.sh
+COPY docker/php/docker-entrypoint-dev.sh /
 COPY docker/php/php-dev.ini "$PHP_INI_DIR/conf.d/zz-php-dev.ini"
+COPY docker/php/startup-dev.sh /usr/local/bin/
 
 ENTRYPOINT ["/docker-entrypoint-dev.sh"]
 

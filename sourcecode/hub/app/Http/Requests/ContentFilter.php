@@ -89,15 +89,15 @@ class ContentFilter extends FormRequest
 
         return $options
             ->map(
-                fn (int $value, string $key) =>
+                fn(int $value, string $key) =>
                 $key === ''
                 ? trans('messages.filter-language-all')
-                : (locale_get_display_name($key, $displayLocale) ?: (locale_get_display_name($key, $fallBack) ?: $key))
+                : (locale_get_display_name($key, $displayLocale) ?: (locale_get_display_name($key, $fallBack) ?: $key)),
             )
             ->when(
                 $withExpectedHits,
-                fn (Collection $items) =>
-                $items->map(fn (string $value, string $key) => sprintf('%s (%d)', $value, $options[$key] ?? 0))
+                fn(Collection $items) =>
+                $items->map(fn(string $value, string $key) => sprintf('%s (%d)', $value, $options[$key] ?? 0)),
             )
             ->sort()
             ->toArray();
@@ -167,7 +167,7 @@ class ContentFilter extends FormRequest
         }
 
         return $options
-            ->map(fn (int $value, string $key) => $withExpectedHits ? sprintf('%s (%d)', $key, $value) : $key)
+            ->map(fn(int $value, string $key) => $withExpectedHits ? sprintf('%s (%d)', $key, $value) : $key)
             ->sort()
             ->toArray();
     }
@@ -198,11 +198,6 @@ class ContentFilter extends FormRequest
         return $this->session()->get('contentLayout', 'grid');
     }
 
-    public function isTitlePreview(): bool
-    {
-        return $this->session()->has('lti');
-    }
-
     /**
      * @param Builder<Content> $query
      * @return Builder<Content>
@@ -214,13 +209,13 @@ class ContentFilter extends FormRequest
         $query
             ->when(
                 $this->getLanguage(),
-                fn (Builder $query) => $query
-                    ->where('language_iso_639_3', $this->getLanguage())
+                fn(Builder $query) => $query
+                    ->where('language_iso_639_3', $this->getLanguage()),
             )
             ->when(
                 count($this->getContentTypes()) > 0,
-                fn (Builder $query) => $query
-                    ->whereIn('content_type', $this->getContentTypes())
+                fn(Builder $query) => $query
+                    ->whereIn('content_type', $this->getContentTypes()),
             )
         ;
 
@@ -289,8 +284,8 @@ class ContentFilter extends FormRequest
             $this->attachModel(
                 $paginator->getCollection()['hits'],
                 $forUser,
-                $showDrafts
-            )
+                $showDrafts,
+            ),
         );
     }
 
@@ -314,44 +309,55 @@ class ContentFilter extends FormRequest
         $eagerLoad = ['users'];
         if ($showDrafts) {
             $eagerLoad[] = 'latestVersion';
-        } else {
+        }
+        if (!$showDrafts || $forUser) {
             $eagerLoad[] = 'latestPublishedVersion';
         }
 
-        $models = Content::whereIn('id', $hits->pluck('id'))
+        $contents = Content::whereIn('id', $hits->pluck('id'))
             ->with($eagerLoad)
             ->withCount(['views'])
             ->get()
             ->keyBy('id');
 
-        return $hits->map(function (array $item) use ($models, $forUser, $showDrafts) {
-            $model = $models[$item['id']]
-                ?? throw new NotFoundHttpException();
-            $version = ($showDrafts ? $model->latestVersion : $model->latestPublishedVersion)
-                ?? throw new NotFoundHttpException();
+        return $hits
+            ->map(fn(array $item) => [
+                ...$item,
+                'content' => $contents[$item['id']] ?? null,
+            ])
+            ->filter(fn(array $item) => $item['content'] !== null)
+            ->map(function (array $item) use ($forUser, $showDrafts) {
+                $content = $item['content'];
+                $version = ($showDrafts ? $content->latestVersion : $content->latestPublishedVersion)
+                    ?? throw new NotFoundHttpException();
 
-            $canUse = Gate::allows('use', [$model, $version]);
-            $canEdit = Gate::allows('edit', $model);
-            $canView = Gate::allows('view', $model);
-            $canDelete = $forUser && Gate::allows('delete', $model);
-            $canCopy = Gate::allows('copy', $model);
+                $canUse = Gate::allows('use', [$content, $version]);
+                $canEdit = Gate::allows('edit', [$content, $version]);
+                $canView = Gate::allows('view', $content);
+                $canDelete = $forUser && Gate::allows('delete', $content);
+                $canCopy = Gate::allows('copy', $content);
 
-            return new ContentDisplayItem(
-                title: $version->title,
-                createdAt: $version->created_at?->toImmutable(),
-                isPublished: $version->published,
-                viewsCount: $model->views_count,
-                contentType: $item['content_type'] ?? $version->getDisplayedContentType(),
-                languageIso639_3: strtoupper($version->language_iso_639_3),
-                users: $model->users->map(fn ($user) => $user->name)->join(', '),
-                detailsUrl: $showDrafts ? route('content.version-details', [$model, $version]) : route('content.details', [$model]),
-                previewUrl: route('content.preview', [$model, $version]),
-                useUrl: $canUse ? route('content.use', [$model, $version]) : null,
-                editUrl: $canEdit ? route('content.edit', [$model, $version]) : null,
-                shareUrl: $canView ? route('content.share', [$model, SessionScope::TOKEN_PARAM => null]) : null,
-                copyUrl: $canCopy ? route('content.copy', [$model, $version]) : null,
-                deleteUrl: $canDelete ? route('content.delete', [$model]) : null,
-            );
-        });
+                $languageName = locale_get_display_language($version->language_iso_639_3, app()->getLocale());
+                $languageName = (!empty($languageName) && $languageName !== $version->language_iso_639_3) ? $languageName : null;
+
+                return new ContentDisplayItem(
+                    title: $version->title,
+                    createdAt: $version->created_at?->toImmutable(),
+                    isPublished: $version->published,
+                    viewsCount: $content->views_count,
+                    contentType: $item['content_type'] ?? $version->getDisplayedContentType(),
+                    languageIso639_3: strtoupper($version->language_iso_639_3),
+                    languageDisplayName: $languageName,
+                    users: $content->users->map(fn($user) => $user->name)->join(', '),
+                    detailsUrl: $showDrafts ? route('content.version-details', [$content, $version]) : route('content.details', [$content]),
+                    previewUrl: route('content.preview', [$content, $version]),
+                    useUrl: $canUse ? route('content.use', [$content, $version]) : null,
+                    editUrl: $canEdit ? route('content.edit', [$content, $version]) : null,
+                    shareUrl: $canView ? route('content.share', [$content, SessionScope::TOKEN_PARAM => null]) : null,
+                    shareDialogUrl: $canView ? route('content.share-dialog', [$content]) : null,
+                    copyUrl: $canCopy ? route('content.copy', [$content]) : null,
+                    deleteUrl: $canDelete ? route('content.delete', [$content]) : null,
+                );
+            });
     }
 }

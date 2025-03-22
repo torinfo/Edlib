@@ -38,6 +38,7 @@ use App\SessionKeys;
 use App\Traits\ReturnToCore;
 use Exception;
 use H5PCore;
+use Illuminate\Cache\Repository as CacheRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -53,7 +54,7 @@ use stdClass;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 use function app;
-use function Cerpus\Helper\Helpers\profile as config;
+use function config;
 use function request;
 
 class H5PController extends Controller
@@ -106,7 +107,6 @@ class H5PController extends Controller
             'id' => $id,
             'title' => $content['title'],
             'language' => $content['language'],
-            'embed' => '<div class="h5p-content" data-content-id="' . $content['id'] . '"></div>',
             'config' => $settings,
             'jsScripts' => $h5pView->getScripts(),
             'styles' => $styles,
@@ -161,8 +161,6 @@ class H5PController extends Controller
         $ltiRequest = $this->lti->getRequest(request());
 
         $editorSetup = H5PEditorConfigObject::create([
-            'userPublishEnabled' => $adapter->isUserPublishEnabled(),
-            'canPublish' => true,
             'canList' => true,
             'showDisplayOptions' => config('h5p.showDisplayOptions'),
             'useLicense' => config('feature.licensing') === true || config('feature.licensing') === '1',
@@ -175,15 +173,15 @@ class H5PController extends Controller
         ]);
 
         $state = H5PStateDataObject::create($displayOptions + [
-                'library' => $contenttype,
-                'license' => License::getDefaultLicense(),
-                'isPublished' => false,
-                'share' => config('h5p.defaultShareSetting'),
-                'language_iso_639_3' => $language,
-                'redirectToken' => $request->get('redirectToken'),
-                'route' => route('h5p.store'),
-                '_method' => "POST",
-            ])->toJson();
+            'library' => $contenttype,
+            'license' => License::getDefaultLicense(),
+            'isPublished' => $ltiRequest?->getPublished() ?? false,
+            'isShared' => $ltiRequest?->getShared() ?? false,
+            'language_iso_639_3' => $language,
+            'redirectToken' => $request->get('redirectToken'),
+            'route' => route('h5p.store'),
+            '_method' => "POST",
+        ])->toJson();
 
         return view(
             'h5p.create',
@@ -196,7 +194,7 @@ class H5PController extends Controller
                 'editorSetup' => $editorSetup->toJson(),
                 'state' => $state,
                 'configJs' => $adapter->getConfigJs(),
-            ]
+            ],
         );
     }
 
@@ -237,7 +235,7 @@ class H5PController extends Controller
             Log::error(__METHOD__ . ": H5P $id is empty. UserId: " . Session::get('authId', 'not-logged-in-user'), [
                 'user' => Session::get('authId', 'not-logged-in-user'),
                 'url' => request()->url(),
-                'request' => request()->all()
+                'request' => request()->all(),
             ]);
             abort(404, 'Resource not found');
         }
@@ -259,8 +257,6 @@ class H5PController extends Controller
         $ltiRequest = Session::get('lti_requests.' . $redirectToken);
 
         $editorSetup = H5PEditorConfigObject::create([
-            'userPublishEnabled' => $adapter->isUserPublishEnabled(),
-            'canPublish' => $h5pContent->canPublish($request),
             'canList' => $h5pContent->canList($request),
             'showDisplayOptions' => config('h5p.showDisplayOptions'),
             'useLicense' => config('feature.licensing') === true || config('feature.licensing') === '1',
@@ -286,7 +282,7 @@ class H5PController extends Controller
         $displayOptions['download'] = $displayOptions['export'];
 
         $editorSetup->setContentProperties(ResourceInfoDataObject::create([
-            'id' => (string)$content['id'],
+            'id' => (string) $content['id'],
             'createdAt' => $h5pContent->created_at->toIso8601String(),
             'type' => $library->getTitleAndVersionString(),
             'maxScore' => $library->supportsMaxScore() ? $h5pContent->max_score : null,
@@ -315,9 +311,9 @@ class H5PController extends Controller
             'language_iso_639_3' => $contentLanguage,
             'title' => $h5pContent->title,
             'license' => $h5pContent->license ?: License::getDefaultLicense(),
-            'isPublished' => $h5pContent->isPublished(),
+            'isPublished' => $ltiRequest?->getPublished() ?? false,
             'isDraft' => $h5pContent->isDraft(),
-            'share' => !$h5pContent->isListed() ? 'private' : 'share',
+            'isShared' => $ltiRequest?->getShared() ?? false,
             'redirectToken' => $request->get('redirectToken'),
             'route' => route('h5p.update', ['h5p' => $id]),
             'max_score' => $h5pContent->max_score,
@@ -339,7 +335,7 @@ class H5PController extends Controller
                 'editorSetup' => $editorSetup->toJson(),
                 'state' => $state,
                 'configJs' => $adapter->getConfigJs(),
-            ]
+            ],
         );
     }
 
@@ -385,12 +381,8 @@ class H5PController extends Controller
         $responseValues = [
             'url' => $this->getRedirectToCoreUrl(
                 $newH5pContent->toLtiContent(
-                    published: H5PContent::isUserPublishEnabled()
-                        ? $request->validated('isPublished')
-                        : null,
-                    shared: ($share = $request->validated('share'))
-                        ? $share === 'share'
-                        : null,
+                    published: $request->validated('isPublished'),
+                    shared: $request->validated('isShared'),
                 ),
                 $request->input('redirectToken'),
             ),
@@ -441,7 +433,7 @@ class H5PController extends Controller
     public function store(H5PStorageRequest $request): Response|JsonResponse
     {
         $request->merge([
-            "parameters" => self::addAuthorToParameters($request->get("parameters"))
+            "parameters" => self::addAuthorToParameters($request->get("parameters")),
         ]);
 
         $content = $this->persistContent($request, Session::get('authId'));
@@ -451,12 +443,8 @@ class H5PController extends Controller
         $responseValues = [
             'url' => $this->getRedirectToCoreUrl(
                 $content->toLtiContent(
-                    published: H5PContent::isUserPublishEnabled()
-                        ? $request->validated('isPublished')
-                        : null,
-                    shared: ($share = $request->validated('share'))
-                        ? $share === 'share'
-                        : null,
+                    published: $request->validated('isPublished'),
+                    shared: $request->validated('isShared'),
                 ),
                 $request->input('redirectToken'),
             ),
@@ -481,25 +469,12 @@ class H5PController extends Controller
 
         $this->store_content_shares(
             $content['id'],
-            $request->filled("col-emails") ? $request->request->get("col-emails") : ""
+            $request->filled("col-emails") ? $request->request->get("col-emails") : "",
         );
-
-        $this->store_content_is_private($newH5pContent, $request);
 
         event(new H5PWasSaved($newH5pContent, $request, ContentVersion::PURPOSE_CREATE));
 
         return $newH5pContent;
-    }
-
-    /**
-     * Store whenever or not content is private.
-     */
-    private function store_content_is_private(H5PContent $content, $request)
-    {
-        $isPrivate = mb_strtoupper($request->get("share", "private")) === 'PRIVATE';
-
-        $content->is_private = $isPrivate;
-        $content->save();
     }
 
     /**
@@ -537,7 +512,7 @@ class H5PController extends Controller
         $sql = 'UPDATE h5p_contents SET license=:license WHERE id=:id';
         $params = [
             ':id' => $id,
-            ':license' => $request->get('license')
+            ':license' => $request->get('license'),
         ];
         $statement = $db->prepare($sql);
         $statement->execute($params);
@@ -628,7 +603,7 @@ class H5PController extends Controller
         }
         if (!$request->filled('col-emails')) {
             $request->request->add([
-                'col-emails' => implode(',', $h5pContent->collaborators->pluck('email')->toArray())
+                'col-emails' => implode(',', $h5pContent->collaborators->pluck('email')->toArray()),
             ]);
         }
 
@@ -646,7 +621,6 @@ class H5PController extends Controller
                 $this->store_content_shares($content['id'], $request->filled("col-emails") ? $request->request->get("col-emails") : "");
             }
 
-            $this->store_content_is_private($newH5pContent, $request);
             $this->storeContentLicense($request, $content['id']);
         } elseif ($versionPurpose === ContentVersion::PURPOSE_UPDATE) { // Transfer the old collaborators to the new version, even if the user saving is not the owner
             $emails = $h5pContent->collaborators->pluck('email')->toArray();
@@ -656,9 +630,8 @@ class H5PController extends Controller
             }
             $collaborators = implode(',', $emails);
 
-            // TODO Update license and privacy based on the old h5p
+            // TODO Update license based on the old h5p
 
-            $this->store_content_is_private($newH5pContent, $request);
             $this->storeContentLicense($request, $content['id']);
             $this->store_content_shares($content['id'], $collaborators);
         }
@@ -699,18 +672,21 @@ class H5PController extends Controller
         return $videoAdapter->getVideo($videoId);
     }
 
-    public function getCopyright(H5PContent $h5p)
+    public function getCopyright(H5PContent $h5p, H5PCopyright $copyright, CacheRepository $cache)
     {
-        $copyrights = (resolve(H5PCopyright::class))->getCopyrights($h5p);
+        $copyrights = $cache->rememberForever($h5p->getCopyrightCacheKey(), fn() => $copyright->getCopyrights($h5p));
+
         if (empty($copyrights)) {
             return response('No copyright found', Response::HTTP_NOT_FOUND);
         }
+
         return response()->json($copyrights);
     }
 
-    public function getInfo(H5PContent $h5p, H5PInfo $h5PInfo)
+    public function getInfo(H5PContent $h5p, H5PInfo $h5pInfo, CacheRepository $cache)
     {
-        $information = $h5PInfo->getInformation($h5p);
+        $information = $cache->rememberForever($h5p->getInfoCacheKey(), fn() => $h5pInfo->getInformation($h5p));
+
         return response()->json($information);
     }
 }

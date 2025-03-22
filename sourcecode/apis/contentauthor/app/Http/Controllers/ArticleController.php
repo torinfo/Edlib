@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Article;
-use App\Content;
 use App\ContentVersion;
 use App\Events\ArticleWasSaved;
 use App\Exceptions\UnhandledVersionReasonException;
@@ -14,7 +13,6 @@ use App\Libraries\DataObjects\EditorConfigObject;
 use App\Libraries\DataObjects\LockedDataObject;
 use App\Libraries\DataObjects\ResourceInfoDataObject;
 use App\Libraries\H5P\Adapters\CerpusH5PAdapter;
-use App\Libraries\H5P\Interfaces\H5PAdapterInterface;
 use App\Libraries\HTMLPurify\Config\MathMLConfig;
 use App\Lti\Lti;
 use App\SessionKeys;
@@ -28,7 +26,7 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
-use function Cerpus\Helper\Helpers\profile as config;
+use function config;
 
 class ArticleController extends Controller
 {
@@ -58,29 +56,24 @@ class ArticleController extends Controller
             ],
         ]);
 
-        /** @var H5PAdapterInterface $adapter */
-        $adapter = app(H5PAdapterInterface::class);
-
         $editorSetup = EditorConfigObject::create(
             [
-                'userPublishEnabled' => $adapter->isUserPublishEnabled(),
-                'canPublish' => true,
                 'canList' => true,
                 'useLicense' => config('feature.licensing') === true || config('feature.licensing') === '1',
-            ]
+            ],
         )->toJson();
 
         $state = ArticleStateDataObject::create([
             'license' => $license,
-            'isPublished' => false,
-            'share' => config('h5p.defaultShareSetting'),
+            'isPublished' => $ltiRequest?->getPublished() ?? false,
+            'isShared' => $ltiRequest?->getShared() ?? false,
             'redirectToken' => $request->get('redirectToken'),
             'route' => route('article.store'),
             '_method' => "POST",
         ])->toJson();
 
         return view('article.create')->with(compact([
-            'emails', 'config', 'editorSetup', 'state'
+            'emails', 'config', 'editorSetup', 'state',
         ]));
     }
 
@@ -103,7 +96,6 @@ class ArticleController extends Controller
         // next line commented out in anticipation of permanently deciding if attribution for Articles is no longer maintained
         //$article->updateAttribution($inputs['origin'] ?? null, $inputs['originators'] ?? []);
 
-        $article->is_published = $article::isUserPublishEnabled() ? $request->input('isPublished', 1) : 1;
         $article->is_draft = $request->input('isDraft', 0);
 
         $article->save();
@@ -115,10 +107,13 @@ class ArticleController extends Controller
             $emailCollaborators = collect(explode(",", $request->get('col-emails')));
         }
 
-        // Handles privacy, collaborators, and registering a new version
+        // Handles collaborators, and registering a new version
         event(new ArticleWasSaved($article, $request, $emailCollaborators, Session::get('authId'), ContentVersion::PURPOSE_CREATE, Session::all()));
 
-        $url = $this->getRedirectToCoreUrl($article->toLtiContent(), $request->get('redirectToken'));
+        $url = $this->getRedirectToCoreUrl($article->toLtiContent(
+            published: $request->validated('isPublished'),
+            shared: $request->validated('isShared'),
+        ), $request->get('redirectToken'));
 
         return response()->json(['url' => $url], Response::HTTP_CREATED);
     }
@@ -153,6 +148,7 @@ class ArticleController extends Controller
      */
     public function edit(Request $request, $id)
     {
+        $ltiRequest = $this->lti->getRequest($request);
         $article = Article::findOrFail($id);
 
         $origin = $article->getAttribution()->getOrigin();
@@ -170,12 +166,10 @@ class ArticleController extends Controller
 
         $editorSetup = EditorConfigObject::create(
             [
-                'userPublishEnabled' => Content::isUserPublishEnabled(),
-                'canPublish' => $article->canPublish($request),
                 'canList' => $article->canList($request),
                 'useLicense' => config('feature.licensing') === true || config('feature.licensing') === '1',
                 'pulseUrl' => config('feature.content-locking') ? route('lock.pulse', ['id' => $id]) : null,
-            ]
+            ],
         );
 
         $editorSetup->setContentProperties(ResourceInfoDataObject::create([
@@ -206,9 +200,9 @@ class ArticleController extends Controller
             'title' => $article->title,
             'content' => $article->render(),
             'license' => $article->license,
-            'isPublished' => $article->isPublished(),
+            'isPublished' => $ltiRequest?->getPublished() ?? false,
             'isDraft' => $article->isDraft(),
-            'share' => !$article->isListed() ? 'private' : 'share',
+            'isShared' => $ltiRequest?->getShared() ?? false,
             'redirectToken' => $request->get('redirectToken'),
             'route' => route('article.update', ['article' => $id]),
             '_method' => "PUT",
@@ -259,7 +253,6 @@ class ArticleController extends Controller
         }
         $article->max_score = $article->getMaxScoreHelper($article->content);
         $article->license = $request->input('license', $oldLicense);
-        $article->is_published = $article::isUserPublishEnabled() ? $request->input('isPublished', 1) : 1;
         $article->is_draft = $request->input('isDraft', false);
 
         //$article->updateAttribution($request->input('origin'), $request->input('originators', []));
@@ -275,7 +268,13 @@ class ArticleController extends Controller
 
         event(new ArticleWasSaved($article, $request, $collaborators, Session::get('authId'), $reason, Session::all()));
 
-        $url = $this->getRedirectToCoreUrl($article->toLtiContent(), $request->get('redirectToken'));
+        $url = $this->getRedirectToCoreUrl(
+            $article->toLtiContent(
+                published: $request->validated('isPublished'),
+                shared: $request->validated('isShared'),
+            ),
+            $request->get('redirectToken'),
+        );
 
         return response()->json([
             'url' => $url,

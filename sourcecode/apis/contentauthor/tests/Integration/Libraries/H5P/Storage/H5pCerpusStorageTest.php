@@ -33,7 +33,7 @@ class H5pCerpusStorageTest extends TestCase
             new NullVideoAdapter(),
         );
 
-        $path = $cerpusStorage->getUpgradeScript($library->name, $library->major_version, $library->minor_version);
+        $path = $cerpusStorage->getUpgradeScript($library->getFolderName(), $library->major_version, $library->minor_version);
 
         $this->assertStringContainsString($file, $path);
     }
@@ -41,17 +41,17 @@ class H5pCerpusStorageTest extends TestCase
     public static function provide_test_getUpdateScript(): \Generator
     {
         yield 'withoutPatch' => [[
-           'name' => 'H5P.Blanks',
-           'major_version' => 1,
-           'minor_version' => 11,
-       ]];
+            'name' => 'H5P.Blanks',
+            'major_version' => 1,
+            'minor_version' => 11,
+        ]];
 
         yield 'withPatch' => [[
-           'name' => 'H5P.Blanks',
-           'major_version' => 1,
-           'minor_version' => 14,
-           'patch_version' => 6,
-           'patch_version_in_folder_name' => 1,
-       ]];
+            'name' => 'H5P.Blanks',
+            'major_version' => 1,
+            'minor_version' => 14,
+            'patch_version' => 6,
+            'patch_version_in_folder_name' => 1,
+        ]];
     }
 }

@@ -60,11 +60,10 @@ class ArticleControllerTest extends TestCase
             'content' => 'Something',
             'origin' => null,
             'originators' => null,
-            'isPublished' => false,
-            'share' => 'share',
+            'isShared' => true,
             'license' => License::LICENSE_BY,
         ])
-        ->assertCreated();
+            ->assertCreated();
 
         $this->assertDatabaseHas('articles', [
             'title' => 'An article',

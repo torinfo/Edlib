@@ -9,6 +9,7 @@ use App\Libraries\DataObjects\EditorConfigObject;
 use App\Libraries\DataObjects\QuestionSetStateDataObject;
 use App\Libraries\DataObjects\ResourceInfoDataObject;
 use App\Libraries\Games\GameBase;
+use App\Lti\Lti;
 use App\QuestionSet;
 use App\QuestionSetQuestion;
 use App\QuestionSetQuestionAnswer;
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\View\View;
 use Ramsey\Uuid\Uuid;
 
-use function Cerpus\Helper\Helpers\profile as config;
+use function config;
 
 class Millionaire extends GameBase
 {
@@ -28,7 +29,8 @@ class Millionaire extends GameBase
 
     protected int $maxScore = 15;
 
-    // Find and return the most recent version of the millionaire game
+    public function __construct(private readonly Lti $lti) {}
+
     public function getGameType()
     {
         $gameType = Gametype::mostRecent(self::$machineName);
@@ -44,8 +46,8 @@ class Millionaire extends GameBase
         } else {
             $questionsAndAnswers = $this->createGameSettingsFromArray($questions);
         }
-        $gameSettings = (object)[
-            'questionSet' => (object)['questions' => $questionsAndAnswers->toArray()],
+        $gameSettings = (object) [
+            'questionSet' => (object) ['questions' => $questionsAndAnswers->toArray()],
             'locale' => $parameters['language_code'] ?? 'nb-no',
         ];
         return $asObject !== true ? json_encode($gameSettings, flags: JSON_THROW_ON_ERROR) : $gameSettings;
@@ -62,10 +64,10 @@ class Millionaire extends GameBase
                     ->map(function (QuestionSetQuestionAnswer $answer) {
                         return [
                             'answer' => $answer->answer_text,
-                            'isCorrect' => (bool)$answer->correct,
+                            'isCorrect' => (bool) $answer->correct,
                         ];
                     })
-                    ->toArray()
+                    ->toArray(),
             ];
         });
     }
@@ -80,9 +82,9 @@ class Millionaire extends GameBase
                     'answers' => array_map(function ($answer) {
                         return [
                             'answer' => $answer['answerText'],
-                            'isCorrect' => (bool)$answer['isCorrect'],
+                            'isCorrect' => (bool) $answer['isCorrect'],
                         ];
-                    }, $question['answers'])
+                    }, $question['answers']),
                 ];
             });
     }
@@ -148,25 +150,25 @@ class Millionaire extends GameBase
 
     public function create(Request $request): View
     {
+        $ltiRequest = $this->lti->getRequest($request);
+
         $extQuestionSetData = Session::get(SessionKeys::EXT_QUESTION_SET);
         Session::forget(SessionKeys::EXT_QUESTION_SET);
 
         $editorSetup = EditorConfigObject::create([
-            'userPublishEnabled' => true,
-            'canPublish' => true,
             'canList' => true,
             'useLicense' => config('feature.licensing') === true || config('feature.licensing') === '1',
             'editorLanguage' => Session::get('locale', config('app.fallback_locale')),
         ])->toJson();
 
         $state = QuestionSetStateDataObject::create([
-            'links' => (object)[
-                "store" => route('questionset.store')
+            'links' => (object) [
+                "store" => route('questionset.store'),
             ],
             'questionSetJsonData' => $extQuestionSetData,
             'license' => License::getDefaultLicense(),
-            'isPublished' => false,
-            'share' => config('h5p.defaultShareSetting'),
+            'isPublished' => $ltiRequest?->getPublished() ?? false,
+            'isShared' => $ltiRequest?->getShared() ?? false,
             'redirectToken' => $request->input('redirectToken'),
             'route' => route('questionset.store'),
             '_method' => "POST",
@@ -186,16 +188,16 @@ class Millionaire extends GameBase
 
     public function edit(Game $game, Request $request): View
     {
+        $ltiRequest = $this->lti->getRequest($request);
+
         $this->addIncludeParse('questions.answers');
         $gameData = $this->convertDataToQuestionSet($game);
 
         $editorSetup = EditorConfigObject::create(
             [
-                'userPublishEnabled' => Game::isUserPublishEnabled(),
-                'canPublish' => $game->canPublish($request),
                 'canList' => $game->canList($request),
                 'useLicense' => config('feature.licensing') === true || config('feature.licensing') === '1',
-            ]
+            ],
         );
         $editorSetup->setContentProperties(ResourceInfoDataObject::create([
             'id' => $game->id,
@@ -207,8 +209,7 @@ class Millionaire extends GameBase
             'id' => $game->id,
             'title' => $game->title,
             'license' => $game->license,
-            'isPublished' => $game->isPublished(),
-            'share' => !$game->isListed() ? 'private' : 'share',
+            'isShared' => $ltiRequest?->getShared() ?? false,
             'redirectToken' => $request->get('redirectToken'),
             'route' => route('game.update', ['game' => $game->id]),
             '_method' => "PUT",
