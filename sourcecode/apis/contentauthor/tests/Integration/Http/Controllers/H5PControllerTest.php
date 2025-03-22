@@ -99,7 +99,6 @@ class H5PControllerTest extends TestCase
 
         $this->assertNull($state['id']);
         $this->assertNull($state['title']);
-        $this->assertFalse($state['isPublished']);
         $this->assertSame($contentType, $state['library']);
         $this->assertNull($state['libraryid']);
         $this->assertSame('nob', $state['language_iso_639_3']);
@@ -126,9 +125,7 @@ class H5PControllerTest extends TestCase
             'email' => $this->faker->email,
             'locale' => 'nn-no',
         ]);
-        $request = Request::create('lti-content/create', 'POST', [
-            'redirectToken' => $this->faker->uuid,
-        ]);
+        $redirectToken = $this->faker->uuid;
 
         $lib = H5PLibrary::factory()->create([
             'major_version' => 1,
@@ -159,8 +156,9 @@ class H5PControllerTest extends TestCase
 
         H5PContentLibrary::factory()->create(['content_id' => $h5pContent->id, 'library_id' => $upgradeLib->id]);
 
-        $articleController = app(H5PController::class);
-        $result = $articleController->edit($request, $h5pContent->id);
+        $result = $this->post('/h5p/' . $h5pContent->id . '/edit?redirectToken=' . $redirectToken)
+            ->assertOk()
+            ->original;
         $this->assertNotEmpty($result);
         $this->assertInstanceOf(View::class, $result);
         $data = $result->getData();
@@ -206,7 +204,7 @@ class H5PControllerTest extends TestCase
         $this->assertEquals($lib->id, $state['libraryid']);
         $this->assertEquals($h5pContent->language_iso_639_3, $state['language_iso_639_3']);
         $this->assertNotEmpty($state['parameters']);
-        $this->assertNotEmpty($state['redirectToken']);
+        $this->assertSame($redirectToken, $state['redirectToken']);
         $this->assertNotEmpty($state['title']);
     }
 
@@ -227,7 +225,7 @@ class H5PControllerTest extends TestCase
 
         $this
             ->withSession(['authId' => $this->faker->uuid])
-            ->putJson('/h5p/'.$content->id, [
+            ->putJson('/h5p/' . $content->id, [
                 '_token' => csrf_token(),
                 ...$jsonData,
             ])
@@ -291,7 +289,6 @@ class H5PControllerTest extends TestCase
         ]);
         $content = H5PContent::factory()->create([
             'library_id' => $library->id,
-            'is_published' => true,
             'is_draft' => false,
             'max_score' => 42,
         ]);
@@ -327,12 +324,13 @@ class H5PControllerTest extends TestCase
             $this->app->make(CredentialStoreInterface::class),
         );
 
-        $result = $this->post('/h5p/' . $content->id, $request->toArray())->original;
+        $response = $this->post('/h5p/' . $content->id, $request->toArray());
+        $result = $response->original;
 
+        $this->assertStringContainsString('<div class="h5p-content" data-content-id="' . $content->id . '"></div>', $response->content());
         $this->assertInstanceOf(View::class, $result);
         $this->assertEquals($content->id, $result['id']);
         $this->assertFalse($result['preview']);
-        $this->assertStringContainsString('data-content-id="'.$content->id.'"', $result['embed']);
         $this->assertNotEmpty($result['jsScripts']);
         $this->assertNotEmpty($result['styles']);
         $this->assertArrayHasKey('inlineStyle', $result);
@@ -374,10 +372,10 @@ class H5PControllerTest extends TestCase
         $this->assertStringContainsString('Some resource title', $contents->embedCode);
 
         // Adapter specific
-        $this->assertContains('//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-AMS-MML_SVG', $result['jsScripts']);
+        $this->assertContains('//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-svg.js', $result['jsScripts']);
 
         if ($adapterMode === "ndla") {
-            $this->assertContains('/js/h5p/wiris/view.js', $result['jsScripts']);
+            $this->assertContains('//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-svg.js', $result['jsScripts']);
             $this->assertContains('/js/h5peditor-custom.js', $result['jsScripts']);
 
             $this->assertContains('/css/ndlah5p-iframe-legacy.css?ver=' . H5PConfigAbstract::CACHE_BUSTER_STRING, $result['styles']);

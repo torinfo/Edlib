@@ -13,9 +13,6 @@ return [
         'enable_licensing' => env('NDLA_ENABLE_LICENSING', false),
         'displayPropertiesBox' => env('NDLA_H5P_DISPLAY_PROPERTIES_BOX', true),
     ],
-    'ndla' => [
-        'userId'  => env('NDLA_IMPORT_USERID', 'fake-import-id'),
-    ],
     'h5p' => [
         'H5P_DragQuestion' => [
             'disableFullscreen' => env("NDLA_H5P_DQ_DISABLE_FULLSCREEN", false),
@@ -33,9 +30,9 @@ return [
         'h5pAdapter' => 'ndla',
         'video' => [
             'enable' => env("NDLA_H5P_VIDEO_STREAM_ENABLED", true),
-            'deleteVideoSourceAfterConvertToStream' => (bool)env("NDLA_H5P_VIDEO_ADAPTER_DELETEVIDEO", false),
+            'deleteVideoSourceAfterConvertToStream' => (bool) env("NDLA_H5P_VIDEO_ADAPTER_DELETEVIDEO", false),
             'pingDelay' => env("NDLA_H5P_VIDEO_DELAY", 10),
         ],
         'saveFrequency' => env('NDLA_H5P_SAVE_FREQUENCY', false),
-    ]
+    ],
 ];

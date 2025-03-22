@@ -24,7 +24,6 @@ class QuestionSetHandler
         $qsData = [
             'title' => $values['title'],
             'language_code' => $request->session()->get('locale', ''),
-            'is_published' => QuestionSet::isUserPublishEnabled() ? $request->input('isPublished', 1) : 1,
             'license' => $request->get('license', ''),
             'is_draft' => $request->input('isDraft', 0),
             'tags' => implode(',', $request->get('tags', [])),
@@ -85,7 +84,6 @@ class QuestionSetHandler
             $questionSet,
             new ResourceMetadataDataObject(
                 license: $request->get('license'),
-                share: $request->get('share'),
                 tags: $request->get('tags'),
             ),
         );
@@ -97,7 +95,6 @@ class QuestionSetHandler
     public function update(QuestionSet $questionSet, $values, Request $request): Content
     {
         $questionSet->title = $values['title'];
-        $questionSet->is_published = $questionSet::isUserPublishEnabled() ? $request->input('isPublished', 1) : 1;
         $questionSet->is_draft = $request->input('isDraft', 0);
         $questionSet->license = $request->input('license', $questionSet->license);
         $questionSet->tags = implode(',', $request->input('tags', []));
@@ -113,7 +110,7 @@ class QuestionSetHandler
 
             $storeAnswer = function ($answer, $newValues) {
                 $answer->answer_text = QuestionBankClient::stripMathContainer($newValues['answerText']);
-                $answer->correct = (bool)$newValues['isCorrect'];
+                $answer->correct = (bool) $newValues['isCorrect'];
                 $answer->image = !empty($newValues['image']['id']) ? $newValues['image']['id'] : null;
                 $answer->order = $newValues['order'];
                 $answer->save();

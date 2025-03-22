@@ -7,7 +7,7 @@ Edlib is an [open-source](https://github.com/cerpus/Edlib/blob/master/LICENSE) a
 * Insert content into a context within your learning system or point directly to the specific content using links. 
 * All resources are stored and available through a single repository for your learning content - neat and tidy.
 
-> The individual learner is at the center of everything we do, and our vision is to provide first-class open learning tools and content to as many of those individuals as possible. &mdash; Tommy W. Nordeng (co-founder of Cerpus)
+> The individual learner is at the center of everything we do, and our vision is to provide first-class open learning tools and content to as many of those individuals as possible. &mdash; Tommy W. Nordeng (co-founder of Edlib AS)
 
 
 ## Installation
@@ -68,9 +68,9 @@ Overall coverage [![codecov](https://codecov.io/github/cerpus/Edlib/branch/maste
 
 The code coverage report is currently covering the PHP parts of the Edlib code for the following parts of Edlib:
 
-- The Hub: N/A - pending setup.
+- The Hub: [![codecov](https://codecov.io/github/cerpus/Edlib/branch/master/graph/badge.svg?token=E3ZWIO0XR8&flag=hub)](https://codecov.io/github/cerpus/Edlib)
 
-- Content Author: [![codecov](https://codecov.io/github/cerpus/Edlib/branch/master/graph/badge.svg?token=E3ZWIO0XR8)](https://codecov.io/github/cerpus/Edlib)
+- Content Author: [![codecov](https://codecov.io/github/cerpus/Edlib/branch/master/graph/badge.svg?token=E3ZWIO0XR8&flag=contentauthor)](https://codecov.io/github/cerpus/Edlib)
 
 
 

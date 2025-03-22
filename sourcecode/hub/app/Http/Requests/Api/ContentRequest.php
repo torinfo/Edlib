@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api;
 
-use App\Enums\ContentUserRole;
+use App\Enums\ContentRole;
 use App\Models\User;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Illuminate\Foundation\Http\FormRequest;
@@ -21,25 +21,25 @@ final class ContentRequest extends FormRequest
             'shared' => ['sometimes', 'boolean'],
 
             'created_at' => [
-                Rule::prohibitedIf(fn () => $gate->denies('admin')),
+                Rule::prohibitedIf(fn() => $gate->denies('admin')),
                 'sometimes',
                 'date',
             ],
 
             'deleted_at' => [
-                Rule::prohibitedIf(fn () => $gate->denies('admin')),
+                Rule::prohibitedIf(fn() => $gate->denies('admin')),
                 'sometimes',
                 'date',
             ],
 
             'roles.*.user' => [
-                Rule::prohibitedIf(fn () => $gate->denies('admin')),
+                Rule::prohibitedIf(fn() => $gate->denies('admin')),
                 Rule::exists(User::class, 'id'),
             ],
 
             'roles.*.role' => [
-                Rule::prohibitedIf(fn () => $gate->denies('admin')),
-                Rule::enum(ContentUserRole::class),
+                Rule::prohibitedIf(fn() => $gate->denies('admin')),
+                Rule::enum(ContentRole::class),
                 'required_with:roles.*.user',
             ],
 
@@ -48,15 +48,15 @@ final class ContentRequest extends FormRequest
     }
 
     /**
-     * @return array<int, array{user: User, role: ContentUserRole}>
+     * @return array<int, array{user: User, role: ContentRole}>
      */
     public function getRoles(): array
     {
         $roles = $this->validated('roles', []);
 
-        return array_map(fn (array $role) => [
+        return array_map(fn(array $role) => [
             'user' => User::where('id', $role['user'])->firstOrFail(),
-            'role' => ContentUserRole::from($role['role']),
+            'role' => ContentRole::from($role['role']),
         ], $roles);
     }
 

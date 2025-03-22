@@ -179,7 +179,7 @@ class AdminH5PDetailsControllerTest extends TestCase
 
         $this->assertCount(3, $data['languages']);
         $libLang->pluck('language_code')->each(
-            fn ($langCode) => $this->assertContains($langCode, $data['languages'])
+            fn($langCode) => $this->assertContains($langCode, $data['languages']),
         );
     }
 
@@ -281,24 +281,25 @@ class AdminH5PDetailsControllerTest extends TestCase
         $data = $response->getData();
 
         $this->assertArrayHasKey('content', $data);
-        $this->assertArrayHasKey('latestVersion', $data);
+        $this->assertArrayHasKey('requestedVersion', $data);
         $this->assertArrayHasKey('history', $data);
 
-        $this->assertFalse($data['latestVersion']);
+        $this->assertNull($data['requestedVersion']);
         $this->assertSame($content->id, $data['content']->id);
 
         $this->assertInstanceOf(Collection::class, $data['history']);
         $this->assertCount(3, $data['history']);
-        $this->assertArrayHasKey($parent->id, $data['history']);
-        $this->assertArrayHasKey($content->id, $data['history']);
-        $this->assertArrayHasKey($child->id, $data['history']);
+        $this->assertArrayHasKey($parentVersion->id, $data['history']);
+        $this->assertArrayHasKey($version->id, $data['history']);
+        $this->assertArrayHasKey($childVersion->id, $data['history']);
 
-        $history = $data['history']->get($content->id);
-        $this->assertNotNull($history);
-        $this->assertSame($content->version_id, $history['content']['version_id']);
-        $this->assertEquals($parent->id, $history['parent']);
+        $history = $data['history']->get($version->id);
+        $this->assertIsArray($history);
+        $this->assertEquals($content->id, $history['content_id']);
+        $this->assertEquals($parent->version_id, $history['parent']);
         $this->assertCount(1, $history['children']);
-        $this->assertEquals($child->id, $history['children'][0]);
+        $this->assertEquals($child->version_id, $history['children'][0]['id']);
+        $this->assertEquals($child->id, $history['children'][0]['content_id']);
     }
 
     public function test_contentHistory_noResource(): void
@@ -322,7 +323,7 @@ class AdminH5PDetailsControllerTest extends TestCase
         $data = $response->getData();
 
         $this->assertSame($content->id, $data['content']['id']);
-        $this->assertTrue($data['latestVersion']);
+        $this->assertNull($data['requestedVersion']);
         $this->assertCount(0, $data['history']);
     }
 
@@ -342,7 +343,7 @@ class AdminH5PDetailsControllerTest extends TestCase
 
         Storage::put(
             sprintf('libraries/%s/language/%s.json', $library->getFolderName(), $translation->language_code),
-            '{"data":"File translation"}'
+            '{"data":"File translation"}',
         );
 
         $response = $this->withSession(['user' => $user])
@@ -375,7 +376,7 @@ class AdminH5PDetailsControllerTest extends TestCase
 
         Storage::put(
             sprintf('libraries/%s/language/%s.json', $library->getFolderName(), $translation->language_code),
-            '{"data":"File translation"}'
+            '{"data":"File translation"}',
         );
 
         $response = $this->withSession(['user' => $user])
@@ -409,13 +410,13 @@ class AdminH5PDetailsControllerTest extends TestCase
 
         Storage::put(
             sprintf('libraries/%s/language/%s.json', $library->getFolderName(), $translation->language_code),
-            '{"data":"File translation"}'
+            '{"data":"File translation"}',
         );
 
         $response = $this->withSession(['user' => $user])
             ->post(
                 route('admin.library-translation', [$library, $translation->language_code]),
-                ['translation' => '{"data":"Updated DB translation"}']
+                ['translation' => '{"data":"Updated DB translation"}'],
             )
             ->assertOk()
             ->original;
@@ -456,13 +457,13 @@ class AdminH5PDetailsControllerTest extends TestCase
 
         Storage::put(
             sprintf('libraries/%s/language/%s.json', $library->getFolderName(), $translation->language_code),
-            '{"data":"File translation"}'
+            '{"data":"File translation"}',
         );
 
         $response = $this->withSession(['user' => $user])
             ->post(
                 route('admin.library-translation', [$library, 'nn']),
-                ['translation' => '{"data":"Updated DB translation"}']
+                ['translation' => '{"data":"Updated DB translation"}'],
             )
             ->assertOk()
             ->original;
@@ -498,18 +499,18 @@ class AdminH5PDetailsControllerTest extends TestCase
 
         Storage::put(
             sprintf('libraries/%s/language/%s.json', $library->getFolderName(), $translation->language_code),
-            '{"data":"File translation"}'
+            '{"data":"File translation"}',
         );
 
         $file = UploadedFile::fake()->createWithContent(
             $translation->language_code . '.json',
-            $fileContents
+            $fileContents,
         );
 
         $response = $this->withSession(['user' => $user])
             ->post(
                 route('admin.library-translation', [$library, $translation->language_code]),
-                ['translationFile' => $file]
+                ['translationFile' => $file],
             )
             ->assertOk()
             ->original;

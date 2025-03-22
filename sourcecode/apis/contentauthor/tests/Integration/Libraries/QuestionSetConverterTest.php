@@ -26,9 +26,7 @@ class QuestionSetConverterTest extends TestCase
     {
         Event::fake();
 
-        $questionSet = QuestionSet::factory()->create([
-            'is_published' => false,
-        ]);
+        $questionSet = QuestionSet::factory()->create();
         /** @var QuestionSetQuestion $question */
         $question = $questionSet->questions()->save(QuestionSetQuestion::factory()->make());
         /** @var QuestionSetQuestionAnswer $a1 */
@@ -49,7 +47,6 @@ class QuestionSetConverterTest extends TestCase
         ]);
         $resourceMetaObject = new ResourceMetadataDataObject(
             license: License::LICENSE_BY_NC,
-            share: 'share',
             tags: ['List', 'of', 'tags'],
         );
 
@@ -58,7 +55,7 @@ class QuestionSetConverterTest extends TestCase
         $game = $questionsetConverter->convert(
             Millionaire::$machineName,
             $questionSet,
-            $resourceMetaObject
+            $resourceMetaObject,
         );
 
         $this->assertDatabaseHas('games', [
@@ -85,7 +82,6 @@ class QuestionSetConverterTest extends TestCase
 
         $questionSet = [
             'owner' => $this->faker->uuid,
-            'is_published' => false,
             'title' => $this->faker->sentence,
             'external_reference' => null,
             'language_code' => $this->faker->languageCode,
@@ -103,9 +99,9 @@ class QuestionSetConverterTest extends TestCase
                         [
                             'answerText' => 'AT 2',
                             'isCorrect' => false,
-                        ]
+                        ],
                     ],
-                ]
+                ],
             ],
         ];
 
@@ -115,7 +111,6 @@ class QuestionSetConverterTest extends TestCase
 
         $resourceMetaObject = new ResourceMetadataDataObject(
             license: License::LICENSE_BY_NC,
-            share: 'share',
             tags: ['List', 'of', 'tags'],
         );
 
@@ -124,7 +119,7 @@ class QuestionSetConverterTest extends TestCase
         $game = $questionsetConverter->convert(
             Millionaire::$machineName,
             $questionSet,
-            $resourceMetaObject
+            $resourceMetaObject,
         );
 
         $this->assertDatabaseHas('games', [

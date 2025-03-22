@@ -12,7 +12,7 @@ use Tests\DuskTestCase;
 
 final class UserTest extends DuskTestCase
 {
-    public function testUserCanSignUp(): void
+    public function testUsersCanSignUpAndBeNotVerified(): void
     {
         $this->browse(function (Browser $browser) {
             $browser->visit('/register')
@@ -22,7 +22,11 @@ final class UserTest extends DuskTestCase
                 ->type('password', 'scaramouche')
                 ->type('password_confirmation', 'scaramouche')
                 ->press('Sign up')
-                ->assertAuthenticated();
+                ->assertAuthenticated()
+                ->visit('/')
+                ->press('Freddie Mercury')
+                ->clickLink('My Account')
+                ->assertSee('Your email address is unverified.');
         });
     }
 
@@ -40,6 +44,22 @@ final class UserTest extends DuskTestCase
                 ->press('Sign up')
                 ->assertSee('The email has already been taken.')
                 ->assertGuest();
+        });
+    }
+
+    public function testEmailIsNormalizedUponRegistration(): void
+    {
+        $this->browse(function (Browser $browser) {
+            $browser->visit('/register')
+                ->assertGuest()
+                ->type('name', 'E. Mel')
+                ->type('email', 'E.MEL@EDLIB.TEST')
+                ->type('password', 'my password')
+                ->type('password_confirmation', 'my password')
+                ->press('Sign up')
+                ->assertAuthenticated()
+                ->visit('/my-account')
+                ->assertInputValue('email', 'e.mel@edlib.test');
         });
     }
 
@@ -165,6 +185,24 @@ final class UserTest extends DuskTestCase
         });
     }
 
+    public function testEmailIsNormalizedUponChanging(): void
+    {
+        User::factory()->withEmail('e.mel@edlib.test')->create();
+
+        $this->browse(
+            fn(Browser $browser) => $browser
+                ->loginAs('e.mel@edlib.test')
+                ->assertAuthenticated()
+                ->visit('/my-account')
+                ->type('email', 'E.MEL@EDLIB.TEST')
+                ->press('Save')
+                // The login should be invalid if the email didn't normalize.
+                // In that case, we wouldn't be able to see these.
+                ->assertSee('Account updated successfully')
+                ->assertInputValue('email', 'e.mel@edlib.test'),
+        );
+    }
+
     public function testUserCanDisconnectFacebookAndGoogleIDWithPassword(): void
     {
         User::factory()->create([
@@ -244,13 +282,13 @@ final class UserTest extends DuskTestCase
         $this->assertNull($user->refresh()->password_reset_token);
 
         $this->browse(
-            fn (Browser $browser) => $browser
+            fn(Browser $browser) => $browser
                 ->visit('/')
                 ->clickLink('Log in')
                 ->clickLink('I forgot my password')
                 ->type('email', 'goldfish@fishbowl.example')
                 ->press('Submit')
-                ->assertSee('You should soon receive a password reset link.')
+                ->assertSee('You should soon receive a password reset link.'),
         );
 
         $this->assertNotNull($user->refresh()->password_reset_token);
@@ -260,13 +298,13 @@ final class UserTest extends DuskTestCase
     public function testPasswordResetDoesNotDistinguishBetweenExistingAndNonexistentEmails(): void
     {
         $this->browse(
-            fn (Browser $browser) => $browser
+            fn(Browser $browser) => $browser
                 ->visit('/')
                 ->clickLink('Log in')
                 ->clickLink('I forgot my password')
                 ->type('email', 'nope@nah.example')
                 ->press('Submit')
-                ->assertSee('You should soon receive a password reset link.')
+                ->assertSee('You should soon receive a password reset link.'),
         );
         // FIXME: we cannot test that a mail wasn't sent via Dusk
     }

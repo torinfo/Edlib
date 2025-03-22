@@ -21,8 +21,7 @@ final readonly class OembedController
     public function __construct(
         private NdlaLegacyConfig $config,
         private Serializer $serializer,
-    ) {
-    }
+    ) {}
 
     public function content(OembedRequest $request): Response
     {
@@ -38,7 +37,10 @@ final readonly class OembedController
         $data = $this->serializer->serialize(new RichContentResponse(
             html: view('ndla-legacy.oembed', [
                 'id' => $id,
-                'src' => route('content.embed', [$content]),
+                'src' => route('ndla-legacy.resource', [
+                    $id,
+                    'locale' => $request->getUrlLocale(),
+                ]),
                 'title' => $content->getTitle(),
             ])->render(),
             width: 800,

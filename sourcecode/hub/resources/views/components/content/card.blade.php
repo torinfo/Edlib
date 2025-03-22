@@ -1,16 +1,14 @@
-@props(['content', 'titlePreviews' => false])
+@props(['content'])
 
 <article class="card content-card">
     <header class="card-header content-card-header border-bottom-0 fw-bold position-relative">
         <a
             href="{{ $content->detailsUrl }}"
             class="text-decoration-none link-body-emphasis"
-            @if ($titlePreviews)
-                hx-get="{{ $content->previewUrl }}"
-                hx-target="#previewModal"
-                data-bs-toggle="modal"
-                data-bs-target="#previewModal"
-            @endif
+            hx-get="{{ $content->previewUrl }}"
+            hx-target="#modal-container"
+            hx-swap="beforeend"
+            data-modal="true"
         >
             <div class="content-card-header-updated text-truncate d-none d-md-block fw-normal">
                 {{ trans('messages.edited') }}:
@@ -40,7 +38,12 @@
             <div class="col-auto small content-type">
                 {{ $content->contentType }}
             </div>
-            <div class="col-auto badge text-bg-primary">
+            <div
+                class="col-auto badge text-bg-primary fw-normal"
+                @isset($content->languageDisplayName))
+                    title="{{$content->languageDisplayName}}"
+                @endisset
+            >
                 {{ $content->languageIso639_3 }}
             </div>
         </div>
@@ -49,7 +52,7 @@
         </div>
     </div>
     <div class="card-footer d-flex align-items-center bg-transparent border-0 action-buttons">
-        <x-content.action-buttons :$content :show-preview="!$titlePreviews" />
+        <x-content.action-buttons :$content />
         <div class="badge position-absolute end-0 d-md-none content-card-preview-badge">
             <x-icon name="eye"/>
             <div class="content-card-views" title="{{ trans('messages.number-of-views') }}">

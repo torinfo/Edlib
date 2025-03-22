@@ -9,8 +9,6 @@ use App\Libraries\H5P\Interfaces\H5PImageInterface;
 use App\Libraries\H5P\Interfaces\H5PVideoInterface;
 use App\Libraries\H5P\Traits\H5PCommonAdapterTrait;
 use Cerpus\QuestionBankClient\QuestionBankClient;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\DB;
 
 use function array_unique;
 use function json_decode;
@@ -25,8 +23,7 @@ class CerpusH5PAdapter implements H5PAdapterInterface
         private readonly H5PAudioInterface $audioAdapter,
         private readonly H5PImageInterface $imageAdapter,
         private readonly H5PVideoInterface $videoAdapter,
-    ) {
-    }
+    ) {}
 
     public function alterParameters(
         string $parameters,
@@ -74,7 +71,7 @@ class CerpusH5PAdapter implements H5PAdapterInterface
         $scripts = [];
 
         if (config('h5p.include-mathjax') === true) {
-            $scripts[] = '//cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-AMS-MML_SVG';
+            $scripts[] = '//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-svg.js';
         }
 
         return array_unique([
@@ -84,7 +81,6 @@ class CerpusH5PAdapter implements H5PAdapterInterface
             ...$this->videoAdapter->getViewScripts(),
         ]);
     }
-
 
     public function getCustomViewCss(): array
     {
@@ -120,9 +116,7 @@ class CerpusH5PAdapter implements H5PAdapterInterface
     /**
      * @return void
      */
-    public function overrideAdapterSettings()
-    {
-    }
+    public function overrideAdapterSettings() {}
 
     /**
      * @return bool
@@ -132,41 +126,9 @@ class CerpusH5PAdapter implements H5PAdapterInterface
         return false; // Shared by default. Corresponds to is_private = false
     }
 
-    public function emptyArticleImportLog($sessionKey = 'message'): void
-    {
-        DB::table('ndla_article_import_statuses')->truncate();
-
-        session()->flash($sessionKey, 'Article Import Log Emptied.');
-    }
-
-    public function resetNdlaIdTracking($sessionKey = 'message'): void
-    {
-        DB::table('ndla_id_mappers')->truncate();
-
-        session()->flash($sessionKey, 'NDLA ID tracking reset.');
-    }
-
-    public function showArticleImportExportFunctionality(): bool
-    {
-        return true;
-    }
-
-    public function runPresaveCommand(): void
-    {
-        Artisan::call('h5p:addPresave');
-
-        session()->flash('message', 'Presave command run.');
-    }
-
     public function useEmbedLink(): int
     {
         return \H5PDisplayOptionBehaviour::ALWAYS_SHOW;
-    }
-
-    public function isUserPublishEnabled(): bool
-    {
-        $isEnabled = config("feature.enableUserPublish");
-        return is_null($isEnabled) || filter_var($isEnabled, FILTER_VALIDATE_BOOLEAN);
     }
 
     public function useMaxScore(): bool
@@ -205,5 +167,10 @@ class CerpusH5PAdapter implements H5PAdapterInterface
     public function getAdapterName(): string
     {
         return 'cerpus';
+    }
+
+    public function filterEditorScripts(): array
+    {
+        return [];
     }
 }

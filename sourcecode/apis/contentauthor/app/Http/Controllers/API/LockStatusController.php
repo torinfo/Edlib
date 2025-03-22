@@ -8,7 +8,7 @@ use App\Libraries\DataObjects\ContentLockDataObject;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Session;
 
-use function Cerpus\Helper\Helpers\profile as config;
+use function config;
 
 class LockStatusController extends Controller
 {
@@ -31,7 +31,7 @@ class LockStatusController extends Controller
         /** @var ContentLock $lock */
         $lock = ContentLock::notExpiredById($id);
         $lockData = ContentLockDataObject::create([
-            'isLocked' => (bool)$lock
+            'isLocked' => (bool) $lock,
         ]);
 
         if (!$lockData->isLocked) {

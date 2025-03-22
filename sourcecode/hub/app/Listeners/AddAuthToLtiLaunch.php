@@ -12,9 +12,7 @@ use function preg_match;
 
 final readonly class AddAuthToLtiLaunch
 {
-    public function __construct(private Guard $guard)
-    {
-    }
+    public function __construct(private Guard $guard) {}
 
     public function handleLaunch(LaunchLti $event): void
     {
@@ -51,7 +49,7 @@ final readonly class AddAuthToLtiLaunch
                 ->withClaim('lis_person_name_family', $familyName);
         }
 
-        if ($tool->send_email) {
+        if ($tool->send_email && $user->email_verified) {
             $launch = $launch
                 ->withClaim('lis_person_contact_email_primary', $user->email);
         }
