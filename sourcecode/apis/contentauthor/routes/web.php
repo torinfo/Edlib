@@ -1,10 +1,6 @@
 <?php
 
-use App\Http\Controllers\API\ContentTypeController;
-use App\Http\Controllers\API\H5PImportController;
 use App\Http\Controllers\API\LinkInfoController;
-use App\Http\Controllers\API\LockStatusController;
-use App\Http\Controllers\API\UnlockController;
 use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\ArticleCopyrightController;
 use App\Http\Controllers\ArticleUploadController;
@@ -85,20 +81,11 @@ Route::post('/article/{id}/upload', [ArticleUploadController::class, 'uploadToEx
 // *************************
 Route::get('v1/link/embeddata', [LinkInfoController::class, 'embed']);
 
-Route::get('v1/content/{id}/lock-status', [LockStatusController::class, 'index'])->name('lock.status');
-Route::post('v1/content/{id}/lock-status', [LockStatusController::class, 'pulse'])->name('lock.pulse');
-Route::match(['GET', 'POST'], 'v1/content/{id}/unlock', [UnlockController::class, 'index'])->name('lock.unlock');
-
 // AJAX and REST(ish) routes
 Route::post('api/progress', [Progress::class, 'storeProgress'])->name("setProgress");
 Route::get('api/progress', [Progress::class, 'getProgress'])->name("getProgress");
 
 Route::match(['GET', 'POST'], '/ajax', [H5PController::class, 'ajaxLoading'])->middleware("adaptermode"); // TODO: Refactor into its own controller
-
-Route::group(['prefix' => 'api', 'middleware' => ['signed.oauth10-request']], function () {
-    Route::post('v1/contenttypes/questionsets', [ContentTypeController::class, 'storeH5PQuestionset']);
-    Route::post('v1/h5p/import', [H5PImportController::class, 'importH5P'])->name('api.import.h5p');
-});
 
 Route::get('article/{article}/copyright', [ArticleCopyrightController::class, 'copyright'])->name('article.copyright');
 
