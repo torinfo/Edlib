@@ -77,7 +77,7 @@ COPY resources resources
 COPY routes routes
 COPY artisan .
 COPY .env.example .
-COPY --from=composer_deps /app/composer.json /app/composer.lock .
+COPY --from=composer_deps /app/composer.json /app/composer.lock ./
 COPY --from=composer_deps /app/vendor vendor
 COPY --from=frontend /app/public public
 
