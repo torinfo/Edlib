@@ -240,7 +240,8 @@ Route::prefix('/lti')->middleware([
         ->scopeBindings();
 
     Route::post('/content/by-edlib2-usage/{edlib2UsageContent}')
-        ->uses([LtiController::class, 'content']);
+        ->uses([LtiController::class, 'content'])
+        ->whereUuid('edlib2UsageContent');
 
     Route::post('/dl')
         ->uses([LtiController::class, 'select'])

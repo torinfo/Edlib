@@ -32,6 +32,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 use function assert;
 use function is_string;
@@ -73,7 +74,7 @@ class ContentController extends Controller
 
     public function details(Content $content, Request $request): View
     {
-        $version = $content->latestPublishedVersion()->firstOrFail();
+        $version = $content->getCachedLatestPublishedVersion() ?? throw new NotFoundHttpException();
         $this->authorize('view', [$content, $version]);
 
         $content->trackView($request, ContentViewSource::Detail);
@@ -99,10 +100,8 @@ class ContentController extends Controller
     {
         $content->trackView($request, ContentViewSource::Share);
 
-        $launch = $content
-            ->latestPublishedVersion()
-            ->firstOrFail()
-            ->toLtiLaunch();
+        $version = $content->getCachedLatestPublishedVersion() ?? throw new NotFoundHttpException();
+        $launch = $version->toLtiLaunch();
 
         return view('content.share', [
             'content' => $content,
@@ -121,10 +120,12 @@ class ContentController extends Controller
         ]);
     }
 
-    public function embed(Content $content, ContentVersion|null $version = null): View
+    public function embed(Request $request, Content $content, ContentVersion|null $version = null): View
     {
-        $version ??= $content->latestPublishedVersion()->firstOrFail();
+        $version ??= $content->getCachedLatestPublishedVersion() ?? throw new NotFoundHttpException();
         $launch = $version->toLtiLaunch();
+
+        $content->trackView($request, ContentViewSource::Embed);
 
         return view('content.embed', [
             'content' => $content,
@@ -468,18 +469,19 @@ class ContentController extends Controller
             $request->getStartDate(),
             $request->getEndDate(),
         );
+        $resolution = $graph->inferResolution();
 
         if ($request->ajax()) {
             return response()->json([
-                'values' => $graph->getData(),
-                'formats' => $request->getDateFormatsForResolution(),
+                'values' => $graph->getData($resolution),
+                'formats' => $request->getDateFormatsForResolution($resolution),
             ]);
         }
 
         return view('content.statistics', [
             'content' => $content,
             'graph' => [
-                'values' => $graph->getData(),
+                'values' => $graph->getData($resolution),
                 'groups' => $request->dataGroups(),
                 'defaultHiddenGroups' => $request->dataGroups()->flip()->except(['total'])->keys(),
                 'texts' => [
@@ -494,7 +496,7 @@ class ContentController extends Controller
                     'loading' => trans('messages.loading'),
                     'loadingFailed' => trans('messages.chart-load-error'),
                 ],
-                'formats' => $request->getDateFormatsForResolution($graph->inferResolution()),
+                'formats' => $request->getDateFormatsForResolution($resolution),
             ],
         ]);
     }

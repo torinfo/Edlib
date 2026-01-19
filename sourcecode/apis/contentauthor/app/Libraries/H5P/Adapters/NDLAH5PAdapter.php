@@ -121,7 +121,8 @@ class NDLAH5PAdapter implements H5PAdapterInterface
     {
         return [
             // Display of formulas
-            '//www.wiris.net/demo/plugins/app/WIRISplugins.js?viewer=image',
+            'https://www.wiris.net/client/plugins/app/WIRISplugins.js?viewer=image',
+            '/js/h5p/wiris/view.js',
             (string) mix('js/h5peditor-custom.js'),
             ...$this->audioAdapter->getViewScripts(),
             ...$this->imageAdapter->getViewScripts(),

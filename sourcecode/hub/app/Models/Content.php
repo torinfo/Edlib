@@ -15,28 +15,28 @@ use Carbon\CarbonImmutable;
 use Cerpus\EdlibResourceKit\Lti\Edlib\DeepLinking\EdlibLtiLinkItem;
 use Cerpus\EdlibResourceKit\Lti\Message\DeepLinking\ContentItem;
 use Database\Factories\ContentFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
+use Laravel\Scout\Builder as ScoutBuilder;
+use Laravel\Scout\Searchable;
 use DateTimeImmutable;
 use DateTimeZone;
 use DomainException;
 use DOMDocument;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use Laravel\Scout\Builder as ScoutBuilder;
-use Laravel\Scout\Searchable;
 use PDO;
 
 use function assert;
-use function property_exists;
 
 class Content extends Model
 {
@@ -75,12 +75,30 @@ class Content extends Model
         static::addGlobalScope('atLeastOneVersion', function (Builder $query) {
             $query->whereHas('versions');
         });
+
+        static::saved(function (self $content) {
+            if (config('cache.edlib2_usage_lookups.enabled')) {
+                $content->clearEdlib2UsageCache();
+            }
+            if (config('cache.content_versions.enabled')) {
+                $content->clearVersionCache();
+            }
+        });
+
+        static::deleted(function (self $content) {
+            if (config('cache.edlib2_usage_lookups.enabled')) {
+                $content->clearEdlib2UsageCache();
+            }
+            if (config('cache.content_versions.enabled')) {
+                $content->clearVersionCache();
+            }
+        });
     }
 
     public function getTitle(): string
     {
-        $version = $this->latestPublishedVersion
-            ?? $this->latestDraftVersion
+        $version = $this->getCachedLatestPublishedVersion()
+            ?? $this->getCachedLatestDraftVersion()
             ?? throw new DomainException('The content has no versions');
 
         return $version->getTitle();
@@ -117,15 +135,8 @@ class Content extends Model
             $version->published = false;
             $version->title .= ' ' . trans('messages.content-copy-suffix');
             $copy->versions()->save($version);
-
-            foreach ($previousVersion->tags()->where('prefix', 'h5p')->get() as $tag) {
-                assert(property_exists($tag, 'original') && array_key_exists('pivot_verbatim_name', $tag->original));
-
-                $version->tags()->attach($tag, [
-                    'verbatim_name' => $tag->original['pivot_verbatim_name'],
-                ]);
-            }
-
+            // TODO: decide how tags in copied content should be handled.
+            // as of now, they are not copied.
             $copy->users()->save($user, ['role' => ContentRole::Owner]);
             $copy->save();
 
@@ -138,7 +149,8 @@ class Content extends Model
      */
     public function latestVersion(): HasOne
     {
-        return $this->hasOne(ContentVersion::class)
+        return $this
+            ->hasOne(ContentVersion::class)
             ->with(['tool'])
             ->latestOfMany();
     }
@@ -148,7 +160,8 @@ class Content extends Model
      */
     public function latestDraftVersion(): HasOne
     {
-        return $this->hasOne(ContentVersion::class)
+        return $this
+            ->hasOne(ContentVersion::class)
             ->with(['tool'])
             ->ofMany(['id' => 'max'], function (Builder $query) {
                 /** @var Builder<ContentVersion> $query */
@@ -161,7 +174,8 @@ class Content extends Model
      */
     public function latestPublishedVersion(): HasOne
     {
-        return $this->hasOne(ContentVersion::class)
+        return $this
+            ->hasOne(ContentVersion::class)
             ->with(['tool'])
             ->ofMany(['id' => 'max'], function (Builder $query) {
                 /** @var Builder<ContentVersion> $query */
@@ -175,6 +189,62 @@ class Content extends Model
     public function versions(): HasMany
     {
         return $this->hasMany(ContentVersion::class)->orderBy('id', 'DESC');
+    }
+
+    /**
+     * Get the latest version with caching
+     *
+     * Cache can be configured in config/cache.php under 'content_versions':
+     * - enabled: Enable/disable caching (default: true)
+     * - duration: Cache duration in seconds (default: 3600 = 1 hour)
+     * - latest_version_key: Cache key prefix for latest version
+     */
+    public function getCachedLatestVersion(): ?ContentVersion
+    {
+        if (!config('cache.content_versions.enabled')) {
+            return $this->latestVersion()->first();
+        }
+
+        $cacheKey = config('cache.content_versions.latest_version_key') . $this->id;
+        $duration = config('cache.content_versions.duration');
+
+        return Cache::remember($cacheKey, $duration, function () {
+            return $this->latestVersion()->first();
+        });
+    }
+
+    /**
+     * Get the latest draft version with caching
+     */
+    public function getCachedLatestDraftVersion(): ?ContentVersion
+    {
+        if (!config('cache.content_versions.enabled')) {
+            return $this->latestDraftVersion()->first();
+        }
+
+        $cacheKey = config('cache.content_versions.latest_draft_version_key') . $this->id;
+        $duration = config('cache.content_versions.duration');
+
+        return Cache::remember($cacheKey, $duration, function () {
+            return $this->latestDraftVersion()->first();
+        });
+    }
+
+    /**
+     * Get the latest published version with caching
+     */
+    public function getCachedLatestPublishedVersion(): ?ContentVersion
+    {
+        if (!config('cache.content_versions.enabled')) {
+            return $this->latestPublishedVersion()->first();
+        }
+
+        $cacheKey = config('cache.content_versions.latest_published_version_key') . $this->id;
+        $duration = config('cache.content_versions.duration');
+
+        return Cache::remember($cacheKey, $duration, function () {
+            return $this->latestPublishedVersion()->first();
+        });
     }
 
     public function createVersionFromLinkItem(
@@ -196,19 +266,46 @@ class Content extends Model
         $version->editedBy()->associate($user);
 
         if ($item instanceof EdlibLtiLinkItem) {
+            $displayField = config('features.ca-content-type-display');
+            $contentType = $item->getContentType(); // Content type machine name
+            $contentTypeName = $item->getContentTypeName(); // Content type title
+            $displayValue = ($displayField === 'h5p_title' ? $contentTypeName : $contentType);
             $version->published = $item->isPublished() ?? true;
             $version->language_iso_639_3 = strtolower($item->getLanguageIso639_3() ?? 'und');
             $version->license = $item->getLicense();
             $version->max_score = $item->getLineItem()?->getScoreConstraints()?->getTotalMaximum() ?? 0;
+            $displayedType = $displayValue ?? $contentType ?? null;
+            if ($displayedType) {
+                $version->displayed_content_type = $displayedType;
+            }
+
+            $version->saveQuietly();
+            // Add content type info as tags
+            if ($contentType) {
+                $version->tags()
+                    ->attach(
+                        Tag::firstOrCreate([
+                            'prefix' => 'h5p',
+                            'name' => strtolower($contentType),
+                        ]), [
+                            'verbatim_name' => strtolower($contentType),
+                        ]
+                    );
+            }
+            if ($contentTypeName) {
+                $version->tags()
+                    ->attach(
+                        Tag::firstOrCreate([
+                            'prefix' => 'h5p_title',
+                            'name' => $contentTypeName,
+                        ]), [
+                            'verbatim_name' => $contentTypeName,
+                        ]
+                    );
+            }
 
             if (count($item->getTags()) > 0) {
-                $version->saveQuietly();
-
-                foreach ($item->getTags() as $tag) {
-                    $version->tags()->attach(Tag::findOrCreateFromString($tag), [
-                        'verbatim_name' => Tag::extractVerbatimName($tag),
-                    ]);
-                }
+                $version->handleSerializedTags($item->getTags());
             }
         }
 
@@ -297,6 +394,36 @@ class Content extends Model
     }
 
     /**
+     * @return HasMany<ContentEdlib2Usage, $this>
+     */
+    public function edlib2Usages(): HasMany
+    {
+        return $this->hasMany(ContentEdlib2Usage::class, 'content_id');
+    }
+
+    public static function firstWithEdlib2UsageIdOrFail(string $usageId): self
+    {
+        if (config('cache.edlib2_usage_lookups.enabled')) {
+            $cacheKey = config('cache.edlib2_usage_lookups.key_prefix') . $usageId;
+            $duration = config('cache.edlib2_usage_lookups.duration');
+
+            /** @var Content */
+            return Cache::remember($cacheKey, $duration, function () use ($usageId) {
+                return self::whereHas('edlib2Usages', function (Builder $query) use ($usageId): void {
+                    /** @var Builder<ContentEdlib2Usage> $query */
+                    $query->where('edlib2_usage_id', $usageId);
+                })->firstOrFail();
+            });
+        }
+
+        /** @var Content */
+        return self::whereHas('edlib2Usages', function (Builder $query) use ($usageId): void {
+            /** @var Builder<ContentEdlib2Usage> $query */
+            $query->where('edlib2_usage_id', $usageId);
+        })->firstOrFail();
+    }
+
+    /**
      * @return HasMany<ContentView, $this>
      */
     public function views(): HasMany
@@ -354,7 +481,8 @@ class Content extends Model
      */
     public function users(): BelongsToMany
     {
-        return $this->belongsToMany(User::class)
+        return $this
+            ->belongsToMany(User::class)
             ->withPivot('role')
             ->withTimestamps()
             ->using(ContentUser::class);
@@ -402,18 +530,18 @@ class Content extends Model
     public static function getAccumulatableViews(DateTimeImmutable $cutoff): array
     {
         $statement = DB::getPdo()->prepare(<<<'EOSQL'
-        SELECT
-            content_id,
-            source,
-            lti_platform_id,
-            (created_at AT TIME ZONE 'UTC')::DATE AS date,
-            EXTRACT(hour FROM created_at AT TIME ZONE 'UTC') AS hour,
-            COUNT(*) AS count
-        FROM content_views
-        WHERE created_at < :cutoff
-        GROUP BY content_id, source, lti_platform_id, date, hour
-        ORDER BY date, hour
-        EOSQL);
+            SELECT
+                content_id,
+                source,
+                lti_platform_id,
+                (created_at AT TIME ZONE 'UTC')::DATE AS date,
+                EXTRACT(hour FROM created_at AT TIME ZONE 'UTC') AS hour,
+                COUNT(*) AS count
+            FROM content_views
+            WHERE created_at < :cutoff
+            GROUP BY content_id, source, lti_platform_id, date, hour
+            ORDER BY date, hour
+            EOSQL);
         $statement->bindValue(':cutoff', $cutoff->format('c'));
         $statement->execute();
 
@@ -432,28 +560,28 @@ class Content extends Model
 
         // TODO: lti platforms as separate stats
         $statement = DB::getPdo()->prepare(<<<'EOSQL'
-        SELECT
-            source,
-            COUNT(*) AS view_count,
-            EXTRACT(YEAR FROM created_at AT TIME ZONE 'UTC') AS year,
-            EXTRACT(MONTH FROM created_at AT TIME ZONE 'UTC') AS month,
-            EXTRACT(DAY FROM created_at AT TIME ZONE 'UTC') AS day
-        FROM content_views
-        WHERE content_id = :content_id AND created_at >= :start_ts AND created_at <= :end_ts
-        GROUP BY source, year, month, day
-        UNION ALL
-        SELECT
-            source,
-            SUM(view_count) AS view_count,
-            EXTRACT(YEAR FROM date) AS year,
-            EXTRACT(MONTH FROM date) AS month,
-            EXTRACT(DAY FROM date) AS day
-        FROM content_views_accumulated
-        WHERE content_id = :content_id AND
-            (date > :start_date OR date = :start_date AND hour >= :start_hour) AND
-            (date < :end_date OR date = :end_date AND hour <= :end_hour)
-        GROUP BY source, year, month, day
-        EOSQL);
+            SELECT
+                source,
+                COUNT(*) AS view_count,
+                EXTRACT(YEAR FROM created_at AT TIME ZONE 'UTC') AS year,
+                EXTRACT(MONTH FROM created_at AT TIME ZONE 'UTC') AS month,
+                EXTRACT(DAY FROM created_at AT TIME ZONE 'UTC') AS day
+            FROM content_views
+            WHERE content_id = :content_id AND created_at >= :start_ts AND created_at <= :end_ts
+            GROUP BY source, year, month, day
+            UNION ALL
+            SELECT
+                source,
+                SUM(view_count) AS view_count,
+                EXTRACT(YEAR FROM date) AS year,
+                EXTRACT(MONTH FROM date) AS month,
+                EXTRACT(DAY FROM date) AS day
+            FROM content_views_accumulated
+            WHERE content_id = :content_id AND
+                (date > :start_date OR date = :start_date AND hour >= :start_hour) AND
+                (date < :end_date OR date = :end_date AND hour <= :end_hour)
+            GROUP BY source, year, month, day
+            EOSQL);
         $statement->bindValue(':content_id', $this->id);
         $statement->bindValue(':start_ts', $start->format('c'));
         $statement->bindValue(':start_date', $start->format('Y-m-d'));
@@ -463,7 +591,7 @@ class Content extends Model
         $statement->bindValue(':end_hour', $end->format('G'));
         $statement->execute();
 
-        $stats = new ContentStats();
+        $stats = new ContentStats($start, $end);
 
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $stats->addStat(
@@ -504,7 +632,7 @@ class Content extends Model
             'language_iso_639_3' => $version->language_iso_639_3,
             'tags' => $version->getSerializedTags(),
             'gives_score' => $version->givesScore(),
-            'content_type' => $version->getDisplayedContentType(),
+            'content_type' => $version->displayed_content_type,
             'views' => $this->countTotalViews(),
         ];
     }
@@ -522,8 +650,7 @@ class Content extends Model
         return Content::search($keywords)
             ->where('published', true)
             ->where('shared', true)
-            ->options(['facets' => ['views']])
-        ;
+            ->options(['facets' => ['views']]);
     }
 
     /**
@@ -533,8 +660,7 @@ class Content extends Model
     {
         return Content::search($keywords)
             ->where('user_ids', $user->id)
-            ->options(['facets' => ['views']])
-        ;
+            ->options(['facets' => ['views']]);
     }
 
     public static function generateSiteMap(): DOMDocument
@@ -559,5 +685,26 @@ class Content extends Model
         $document->appendChild($root);
 
         return $document;
+    }
+
+    /**
+     * Clear the cache for this content's Edlib2 usage IDs
+     */
+    private function clearEdlib2UsageCache(): void
+    {
+        $keyPrefix = config('cache.edlib2_usage_lookups.key_prefix');
+        $this->edlib2Usages->each(function (ContentEdlib2Usage $usage) use ($keyPrefix) {
+            Cache::forget($keyPrefix . $usage->edlib2_usage_id);
+        });
+    }
+
+    /**
+     * Clear all version-related caches for this content
+     */
+    public function clearVersionCache(): void
+    {
+        Cache::forget(config('cache.content_versions.latest_version_key') . $this->id);
+        Cache::forget(config('cache.content_versions.latest_draft_version_key') . $this->id);
+        Cache::forget(config('cache.content_versions.latest_published_version_key') . $this->id);
     }
 }

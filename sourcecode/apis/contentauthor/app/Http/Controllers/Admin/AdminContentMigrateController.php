@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\AuditLog;
 use App\ContentVersion;
 use App\Events\H5PWasSaved;
 use App\H5PContent;
@@ -26,10 +27,11 @@ use H5PCore;
 use H5PFrameworkInterface;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use JsonException;
+use Ramsey\Uuid\Uuid;
 use RuntimeException;
 
 class AdminContentMigrateController extends Controller
@@ -44,67 +46,96 @@ class AdminContentMigrateController extends Controller
 
     public function index(Request $request): View
     {
+        $pageSize = 25;
+        $page = (int) $request->get('page', 1);
+        $contents = [];
+        $count = 0;
+
         $fromLibrary = H5PLibrary::where('name', 'H5P.NDLAThreeImage')
             ->where('major_version', 0)
-            ->where('minor_version', 4)
+            ->where('minor_version', 5)
             ->first();
         $toLibrary = H5PLibrary::where('name', 'H5P.EscapeRoom')
             ->where('major_version', 0)
-            ->where('minor_version', 6)
+            ->where('minor_version', 7)
             ->first();
 
         if ($fromLibrary !== null && $toLibrary !== null) {
             if ($request->method() === 'POST' && $request->has('content')) {
                 $migrated = $this->migrate($fromLibrary, $toLibrary, $request->input('content'));
             }
-
-            $contents = ContentVersion::leftJoin(DB::raw('content_versions as cv'), 'cv.parent_id', '=', 'content_versions.id')
+            $itemsQuery = H5PContent::select(['h5p_contents.id', 'h5p_contents.title'])
+                ->leftJoin('content_versions', 'content_versions.id', '=', 'h5p_contents.version_id')
+                ->leftJoin('content_versions as cv', 'cv.parent_id', '=', 'content_versions.id')
+                ->where('h5p_contents.library_id', $fromLibrary->id)
                 ->where(function ($query) {
                     $query
-                        ->whereNull('cv.content_id')
+                        ->whereNull('cv.id')
                         ->orWhereNotIn('cv.version_purpose', [ContentVersion::PURPOSE_UPGRADE, ContentVersion::PURPOSE_UPDATE]);
                 })
-                ->join('h5p_contents', 'h5p_contents.id', '=', 'content_versions.content_id')
-                ->where('h5p_contents.library_id', $fromLibrary->id)
-                ->get();
-        }
+                ->orderBy('h5p_contents.id');
 
+            $count = $itemsQuery->count();
+            $contents = $itemsQuery->limit($pageSize)->offset($pageSize * ($page - 1))->get();
+        }
         return view('admin.migrate.index', [
             'fromLibrary' => $fromLibrary,
             'toLibrary' => $toLibrary,
-            'contents' => $contents ?? [],
             'migrated' => $migrated ?? [],
+            'paginator' => (new LengthAwarePaginator($contents, $count, $pageSize))
+                ->withPath(route('admin.migrate.library-content')),
         ]);
     }
 
     private function migrate(H5pLibrary $fromLibrary, H5pLibrary $toLibrary, array $contentIds): array
     {
         $migrated = [];
+        $runId = Uuid::uuid4()->toString();
 
         foreach ($contentIds as $contentId) {
             $sourceH5p = H5PContent::where('id', $contentId)->where('library_id', $fromLibrary->id)->first();
             if ($sourceH5p !== null) {
+                $logData = [
+                    'runId' => $runId,
+                    'fromLibrary' => [
+                        'id' => $fromLibrary->id,
+                        'name' => $fromLibrary->getLibraryString(true),
+                    ],
+                    'toLibrary' => [
+                        'id' => $toLibrary->id,
+                        'name' => $toLibrary->getLibraryString(true),
+                    ],
+                    'fromContentId' => $sourceH5p->id,
+                    'toContentId' => null,
+                    'title' => $sourceH5p->title,
+                    'error' => null,
+                ];
+                $result = [
+                    'id' => null,
+                    'title' => $sourceH5p->title,
+                    'message' => '',
+                ];
                 try {
                     $this->checkContent($sourceH5p);
                     $hubData = $this->getHubInfo($sourceH5p);
                     $newParameters = $this->alterParameters($sourceH5p->parameters);
-                    $newParameters = $this->upgradeContentActionLibraries($newParameters);
                     $newH5pContent = $this->save($sourceH5p, $newParameters, $fromLibrary, $toLibrary);
+                    $result['id'] = $newH5pContent->id;
+                    $result['message'] = 'Migrated';
+                    $logData['toContentId'] = $newH5pContent->id;
+                    $logData['error'] = false;
                     $this->createHubVersion($hubData['update_url'], $newH5pContent);
-
-                    $migrated[$sourceH5p->id] = [
-                        'id' => $newH5pContent->id,
-                        'title' => $sourceH5p->title,
-                        'message' => 'Updated',
-                    ];
                 } catch (RuntimeException | GuzzleException | JsonException $e) {
                     Log::error('Failed to migrate content: ' . $e->getMessage());
-
-                    $migrated[$sourceH5p->id] = [
-                        'id' => null,
-                        'title' => $sourceH5p->title,
-                        'message' => 'Failed to migrate content: ' . $e->getMessage(),
-                    ];
+                    $result['message'] = 'Failed to migrate content: ' . $e->getMessage();
+                    $logData['error'] = true;
+                    $logData['errorMessage'] = $e->getMessage();
+                } finally {
+                    $migrated[$sourceH5p->id] = $result;
+                    AuditLog::log(
+                        'Migrate content from H5P.NDLAThreeImage to H5P.EscapeRoom',
+                        json_encode($logData),
+                    );
                 }
             }
         }
@@ -113,73 +144,12 @@ class AdminContentMigrateController extends Controller
     }
 
     /**
-     * Update the content from H5P.NDLAThreeImage 0.4.x to H5P.EsacapeRoom 0.6.x
-     * See upgrades.js in H5P.EscapeRoom 0.6.x
+     * Update the semantics
      */
     private function alterParameters(string $parameters): string
     {
         $content = json_decode($parameters, associative: true);
-        for ($i = 0; $i < count($content['threeImage']['scenes'] ?? []); $i++) {
-            $content['threeImage']['scenes'][$i]['enableZoom'] = false;
-
-            for ($j = 0; $j < count($content['threeImage']['scenes'][$i]['interactions'] ?? []); $j++) {
-                $content['threeImage']['scenes'][$i]['interactions'][$j]['passwordSettings'] = [];
-                $content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings'] = [];
-
-                if (array_key_exists('label', $content['threeImage']['scenes'][$i]['interactions'][$j])) {
-                    if (array_key_exists('showAsHotspot', $content['threeImage']['scenes'][$i]['interactions'][$j]['label'])) {
-                        $content['threeImage']['scenes'][$i]['interactions'][$j]['showAsHotspot'] = $content['threeImage']['scenes'][$i]['interactions'][$j]['label']['showAsHotspot'];
-                        unset($content['threeImage']['scenes'][$i]['interactions'][$j]['label']['showAsHotspot']);
-                    }
-
-                    if (array_key_exists('showAsOpenSceneContent', $content['threeImage']['scenes'][$i]['interactions'][$j]['label'])) {
-                        $content['threeImage']['scenes'][$i]['interactions'][$j]['showAsOpenSceneContent'] = $content['threeImage']['scenes'][$i]['interactions'][$j]['label']['showAsOpenSceneContent'];
-                        unset($content['threeImage']['scenes'][$i]['interactions'][$j]['label']['showAsOpenSceneContent']);
-                    }
-
-                    if (array_key_exists('interactionPassword', $content['threeImage']['scenes'][$i]['interactions'][$j]['label'])) {
-                        $content['threeImage']['scenes'][$i]['interactions'][$j]['passwordSettings']['interactionPassword'] = $content['threeImage']['scenes'][$i]['interactions'][$j]['label']['interactionPassword'];
-                        unset($content['threeImage']['scenes'][$i]['interactions'][$j]['label']['interactionPassword']);
-                    }
-
-                    if (array_key_exists('interactionPasswordHint', $content['threeImage']['scenes'][$i]['interactions'][$j]['label'])) {
-                        $content['threeImage']['scenes'][$i]['interactions'][$j]['passwordSettings']['interactionPasswordHint'] = $content['threeImage']['scenes'][$i]['interactions'][$j]['label']['interactionPasswordHint'];
-                        unset($content['threeImage']['scenes'][$i]['interactions'][$j]['label']['interactionPasswordHint']);
-                    }
-
-                    if (array_key_exists('showHotspotOnHover', $content['threeImage']['scenes'][$i]['interactions'][$j]['label'])) {
-                        $content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings']['showHotspotOnHover'] = $content['threeImage']['scenes'][$i]['interactions'][$j]['label']['showHotspotOnHover'];
-                        unset($content['threeImage']['scenes'][$i]['interactions'][$j]['label']['showHotspotOnHover']);
-                    }
-
-                    if (array_key_exists('isHotspotTabbable', $content['threeImage']['scenes'][$i]['interactions'][$j]['label'])) {
-                        $content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings']['isHotspotTabbable'] = $content['threeImage']['scenes'][$i]['interactions'][$j]['label']['isHotspotTabbable'];
-                        unset($content['threeImage']['scenes'][$i]['interactions'][$j]['label']['isHotspotTabbable']);
-                    }
-
-                    if ($content['threeImage']['scenes'][$i]['sceneType'] === 'static') {
-                        if (array_key_exists('hotSpotSizeValues', $content['threeImage']['scenes'][$i]['interactions'][$j]['label'])) {
-                            $content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings']['hotSpotSizeValues'] = $content['threeImage']['scenes'][$i]['interactions'][$j]['label']['hotSpotSizeValues'];
-                            unset($content['threeImage']['scenes'][$i]['interactions'][$j]['label']['hotSpotSizeValues']);
-
-                            if ($content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings']['hotSpotSizeValues'] === '256,128') {
-                                $content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings']['hotSpotSizeValues'] = '25,25';
-                            }
-                        } else {
-                            $content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings']['hotSpotSizeValues'] = '25,25';
-                        }
-                    } elseif (array_key_exists('hotSpotSizeValues', $content['threeImage']['scenes'][$i]['interactions'][$j]['label'])) {
-                        $content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings']['hotSpotSizeValues'] = $content['threeImage']['scenes'][$i]['interactions'][$j]['label']['hotSpotSizeValues'];
-                        unset($content['threeImage']['scenes'][$i]['interactions'][$j]['label']['hotSpotSizeValues']);
-                    } else {
-                        $content['threeImage']['scenes'][$i]['interactions'][$j]['hotspotSettings']['hotSpotSizeValues'] = '256,128';
-                    }
-                } else {
-                    $content['threeImage']['scenes'][$i]['interactions'][$j]['label'] = [];
-                }
-            }
-
-        }
+        $content['threeImage']['wasConvertedFromVirtualTour'] = true;
 
         return json_encode($content, flags: JSON_THROW_ON_ERROR);
     }
@@ -296,6 +266,8 @@ class AdminContentMigrateController extends Controller
             ->withPublished($data->published)
             ->withShared($data->shared)
             ->withTags($data->tags)
+            ->withContentType($data->machineName)
+            ->withContentTypeName($data->machineDisplayName)
         ;
 
         $returnRequest = new Oauth1Request('POST', $returnUrl, [
@@ -316,28 +288,6 @@ class AdminContentMigrateController extends Controller
         ])
             ->getBody()
             ->getContents();
-    }
-
-    /**
-     * These libraries allow the use of sub-content. The library semantics.json file contains which libraries that
-     * are allowed and the version. Allowed version has been updated for some of these libraries. The dependency to
-     * these libraries are only stored in the content, so find and "update" them
-     *
-     * @throws JsonException
-     */
-    private function upgradeContentActionLibraries(string $params): string
-    {
-        $parameters = json_decode($params, associative: true, flags: JSON_THROW_ON_ERROR);
-
-        for ($i = 0; $i < count($parameters['threeImage']['scenes'] ?? []); $i++) {
-            for ($j = 0; $j < count($parameters['threeImage']['scenes'][$i]['interactions'] ?? []); $j++) {
-                if (isset($parameters['threeImage']['scenes'][$i]['interactions'][$j]['action']['library'])) {
-                    $parameters['threeImage']['scenes'][$i]['interactions'][$j]['action']['library'] = $this->getUpdatedLibraryVersion($parameters['threeImage']['scenes'][$i]['interactions'][$j]['action']['library']);
-                }
-            }
-        }
-
-        return json_encode($parameters, flags: JSON_THROW_ON_ERROR);
     }
 
     /**
@@ -363,29 +313,5 @@ class AdminContentMigrateController extends Controller
         $dependencies = $validator->getDependencies();
 
         $this->framework->saveLibraryUsage($h5pContent->id, $dependencies);
-    }
-
-    /**
-     * Get the new version for the dynamic/soft/sub-content dependencies
-     */
-    private function getUpdatedLibraryVersion(string $oldLibrary): string
-    {
-        /*
-         * Other libraries that could be in the content that have unchanged version:
-         *   H5P.GoToScene 0.1
-         *   H5P.AdvancedText 1.1
-         *   H5P.Image 1.1
-         *   H5P.Summary 1.10
-         *   H5P.SingleChoiceSet 1.11
-        */
-
-        // Should be safe since their respective 'upgrades.js' do not have entries for these changes
-        return match ($oldLibrary) {
-            'H5P.Audio 1.4' => 'H5P.Audio 1.5',
-            'H5P.Video 1.5' => 'H5P.Video 1.6',
-            'H5P.MultiChoice 1.14' => 'H5P.MultiChoice 1.16',
-            'H5P.Blanks 1.12' => 'H5P.Blanks 1.14',
-            default => $oldLibrary,
-        };
     }
 }
