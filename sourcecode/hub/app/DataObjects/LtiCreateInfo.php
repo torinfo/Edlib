@@ -47,6 +47,10 @@ class LtiCreateInfo
             return asset('images/lti-tools/millionaire.png');
         }
 
+        if (str_contains(strtolower($name), 'xerte')) {
+            return asset('images/lti-tools/X_transparant_leeg.png');
+        }
+
         return null;
     }
 }
