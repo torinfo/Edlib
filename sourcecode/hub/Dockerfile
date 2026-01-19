@@ -72,7 +72,7 @@ COPY public public
 COPY resources resources
 COPY routes routes
 COPY artisan .
-COPY --from=composer_deps /app/composer.json /app/composer.lock .
+COPY --from=composer_deps /app/composer.json /app/composer.lock ./
 COPY --from=composer_deps /app/vendor vendor
 COPY --from=frontend /app/public public
 
@@ -103,7 +103,7 @@ COPY docker/php/fpm-prod.conf "/usr/local/etc/php-fpm.d/zz-fpm-prod.conf"
 
 FROM prod AS test
 
-COPY phpunit.xml .env.testing .
+COPY phpunit.xml .env.testing ./
 COPY tests tests
 
 ENV APP_ENV=testing \

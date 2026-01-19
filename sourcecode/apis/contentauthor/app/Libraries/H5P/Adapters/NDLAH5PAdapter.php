@@ -120,7 +120,9 @@ class NDLAH5PAdapter implements H5PAdapterInterface
     public function getCustomViewScripts(): array
     {
         return [
-            '//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-svg.js',
+            // Display of formulas
+            'https://www.wiris.net/client/plugins/app/WIRISplugins.js?viewer=image',
+            '/js/h5p/wiris/view.js',
             (string) mix('js/h5peditor-custom.js'),
             ...$this->audioAdapter->getViewScripts(),
             ...$this->imageAdapter->getViewScripts(),
@@ -188,7 +190,6 @@ class NDLAH5PAdapter implements H5PAdapterInterface
         config(collect([
             'app.enable_licensing',
             'feature.licensing',
-            'feature.content-locking',
             'feature.context-collaboration',
             'feature.collaboration',
             'feature.export_h5p_on_save',
