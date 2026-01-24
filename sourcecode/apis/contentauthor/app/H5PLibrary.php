@@ -2,7 +2,9 @@
 
 namespace App;
 
+use App\Observers\H5PLibraryObserver;
 use H5PFrameworkInterface;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -52,6 +54,7 @@ use Illuminate\Support\Facades\Storage;
  * @property string $add_to
  * @property bool $patch_version_in_folder_name
  */
+#[ObservedBy([H5PLibraryObserver::class])]
 class H5PLibrary extends Model
 {
     use HasFactory;
@@ -229,7 +232,7 @@ class H5PLibrary extends Model
             $libraryData['machineName'] ?? $libraryData['name'],
             $libraryData['majorVersion'],
             $libraryData['minorVersion'],
-            $libraryData['patchVersion'] ?? ''
+            $libraryData['patchVersion'] ?? '',
         );
     }
 
@@ -334,7 +337,7 @@ class H5PLibrary extends Model
             ->whereNotNull('l1.add_to')
             ->get()
             ->map(function ($addon) {
-                return (array)$addon;
+                return (array) $addon;
             })
             ->toArray();
     }
@@ -368,5 +371,16 @@ class H5PLibrary extends Model
         }
 
         return $icon ?? url('/graphical/h5p_logo.svg');
+    }
+
+    public static function canBeDeleted(int $libraryId, int|null $usageCount = null): bool
+    {
+        if ($usageCount === null) {
+            $h5pFramework = app(H5PFrameworkInterface::class);
+            // Number of references by other content types/libraries. Only counts content using library as main content type, so we skip that
+            $usageCount = $h5pFramework->getLibraryUsage($libraryId, skipContent: true)['libraries'];
+        }
+
+        return $usageCount === 0 && H5PContentLibrary::where('library_id', $libraryId)->doesntExist();
     }
 }

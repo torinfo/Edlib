@@ -201,16 +201,17 @@ return [
         'en' => 'English',
         'ko' => '한국어',
         'nb' => 'Norsk',
+        'nl' => 'Nederlands',
         'nn' => 'Nynorsk',
         'sv' => 'Svenska',
+        'zh-hans' => '简体中文',
     ],
 
-    'site-name' => env('LICENSE_SITE', 'ContentAuthor'),
+    'site-name' => 'ContentAuthor',
 
     'consumer-key' => env('LTI_CONSUMER_KEY', env('H5P_CONSUMER_KEY')),
     'consumer-secret' => env('LTI_CONSUMER_SECRET', env('H5P_CONSUMER_SECRET')),
 
     'displayPropertiesBox' => env('DISPLAY_PROPERTIES_BOX', true),
-    'deploymentEnvironment' => env('DEPLOYMENT_ENVIRONMENT'),
     'cdnPrefix' => env('CDN_WITH_PREFIX', ''),
 ];

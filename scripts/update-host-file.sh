@@ -4,10 +4,8 @@ set -eu
 ip="127.0.0.1"
 suffix="${EDLIB_ROOT_DOMAIN:-edlib.test}"
 subdomains="
-api
 ca
 docs
-facade
 hub
 hub-vite-hmr
 hub-ndla-legacy
@@ -15,9 +13,8 @@ hub-test
 hub-test-ndla-legacy
 mailpit
 moodle
-npm.components
 nynorobot
-www
+nynorskroboten
 "
 
 hosts="$(cat /etc/hosts)"

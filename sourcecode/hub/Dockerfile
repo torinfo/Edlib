@@ -72,7 +72,7 @@ COPY public public
 COPY resources resources
 COPY routes routes
 COPY artisan .
-COPY --from=composer_deps /app/composer.json /app/composer.lock .
+COPY --from=composer_deps /app/composer.json /app/composer.lock ./
 COPY --from=composer_deps /app/vendor vendor
 COPY --from=frontend /app/public public
 
@@ -98,10 +98,12 @@ RUN set -eux; \
 
 VOLUME /app/storage
 
+COPY docker/php/fpm-prod.conf "/usr/local/etc/php-fpm.d/zz-fpm-prod.conf"
 
-FROM prod as test
 
-COPY phpunit.xml .env.testing .
+FROM prod AS test
+
+COPY phpunit.xml .env.testing ./
 COPY tests tests
 
 ENV APP_ENV=testing \
@@ -128,8 +130,9 @@ RUN set -eux; \
         xdebug \
     ;
 
-COPY docker/php/docker-entrypoint-dev.sh /docker-entrypoint-dev.sh
+COPY docker/php/docker-entrypoint-dev.sh /
 COPY docker/php/php-dev.ini "$PHP_INI_DIR/conf.d/zz-php-dev.ini"
+COPY docker/php/startup-dev.sh /usr/local/bin/
 
 ENTRYPOINT ["/docker-entrypoint-dev.sh"]
 

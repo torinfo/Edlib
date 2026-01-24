@@ -2,6 +2,7 @@
 
 namespace App\Libraries\H5P;
 
+use App\AuditLog;
 use App\H5PLibrary;
 use App\Libraries\ContentAuthorStorage;
 use App\Libraries\H5P\Image\NdlaImageAdapter;
@@ -39,8 +40,7 @@ class AjaxRequest
         private readonly H5PCore $core,
         private readonly H5peditor $editor,
         private readonly ContentAuthorStorage $contentAuthorStorage,
-    ) {
-    }
+    ) {}
 
     public function getReturnType(): string|null
     {
@@ -114,7 +114,7 @@ class AjaxRequest
                 $request->get('language'),
                 app(CerpusStorageInterface::class)->getAjaxPath(),
                 null,
-                $request->get('default-language')
+                $request->get('default-language'),
             );
             $settings = $this->handleEditorBehaviorSettings($request, $name);
             if (!empty($settings['file']) && is_array($libraryData->css ?? null)) {
@@ -153,9 +153,9 @@ class AjaxRequest
             'recentlyUsed' => $this->editor->ajaxInterface->getAuthorsRecentlyUsedLibraries(),
             'apiVersion' => [
                 'major' => H5PCore::$coreApi['majorVersion'],
-                'minor' => H5PCore::$coreApi['minorVersion']
+                'minor' => H5PCore::$coreApi['minorVersion'],
             ],
-            'details' => $this->core->h5pF->getMessages('info')
+            'details' => $this->core->h5pF->getMessages('info'),
         ];
     }
 
@@ -171,16 +171,32 @@ class AjaxRequest
             H5PCore::ajaxError($this->core->h5pF->t('Could not get posted H5P.'), 'NO_CONTENT_TYPE');
             exit;
         }
+        $file = $request->file('h5p');
+        AuditLog::log(
+            'Upload content from front',
+            json_encode([
+                'file' => [
+                    'name' => $file->getClientOriginalName(),
+                    'size' => $file->getSize(),
+                    'target' => $file->getPathname(),
+                ],
+            ]),
+        );
 
-        $originalAjax = $this->editor->ajax;
-        $originalAjax->action(H5PEditorEndpoints::LIBRARY_UPLOAD, $request->bearerToken(), $request->file('h5p')->getRealPath(), "0");
+        $this->editor->ajax->action(H5PEditorEndpoints::LIBRARY_UPLOAD, $request->bearerToken(), $file->getRealPath(), "0");
     }
 
     private function libraryInstall($token, $library): void
     {
         set_time_limit(60);
-        $originalAjax = $this->editor->ajax;
-        $originalAjax->action(H5PEditorEndpoints::LIBRARY_INSTALL, $token, $library);
+        AuditLog::log(
+            'Install library from h5p.org',
+            json_encode([
+                'library' => $library,
+            ]),
+        );
+
+        $this->editor->ajax->action(H5PEditorEndpoints::LIBRARY_INSTALL, $token, $library);
     }
 
     private function handleEditorBehaviorSettings(Request $request, $library): array
@@ -239,10 +255,10 @@ class AjaxRequest
             exit;
         }
         $validator = new H5PContentValidator($this->core->h5pF, $this->core);
-        $validator->validateLibrary($libraryParameters, (object)['options' => [$libraryParameters->library]]);
+        $validator->validateLibrary($libraryParameters, (object) ['options' => [$libraryParameters->library]]);
         return [
             'success' => true,
-            'data' => $libraryParameters
+            'data' => $libraryParameters,
         ];
     }
 
@@ -302,7 +318,7 @@ class AjaxRequest
             Storage::disk(),
             Storage::disk('h5pTmp'),
             $tmpLibraryRelative,
-            $tmpLibraryRelative
+            $tmpLibraryRelative,
         );
         $tmpLibraries = $this->core->h5pF->getH5pPath($tmpLibrariesRelative);
         $tmpLibraryFolder = $this->core->h5pF->getH5pPath($tmpLibraryRelative);

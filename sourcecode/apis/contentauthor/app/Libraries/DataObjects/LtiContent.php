@@ -17,6 +17,7 @@ final readonly class LtiContent
         public string $url,
         public string $title,
         public string $machineName,
+        public string $machineDisplayName,
         public bool $hasScore,
         public string|null $titleHtml = null,
         public string|null $editUrl = null,
@@ -27,6 +28,5 @@ final readonly class LtiContent
         public bool|null $shared = null,
         public array $tags = [],
         public int|null $maxScore = null,
-    ) {
-    }
+    ) {}
 }

@@ -9,15 +9,14 @@ use Illuminate\Auth\GenericUser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Session;
 
 use function abort;
 use function redirect;
 
 final readonly class LtiAdminAccess
 {
-    public function __construct(private Lti $lti)
-    {
-    }
+    public function __construct(private Lti $lti) {}
 
     public function __invoke(Request $request): RedirectResponse
     {
@@ -31,6 +30,8 @@ final readonly class LtiAdminAccess
             'name' => $ltiRequest->getUserFullName(),
             'roles' => ['superadmin'],
         ]));
+
+        Session::put('lti_requests.admin', $ltiRequest);
 
         return redirect()->route('admin');
     }

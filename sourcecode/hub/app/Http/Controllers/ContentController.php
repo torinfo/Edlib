@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Enums\ContentUserRole;
+use App\DataObjects\LtiCreateInfo;
+use App\Enums\ContentRole;
 use App\Enums\ContentViewSource;
 use App\Enums\LtiToolEditMode;
+use App\Http\Requests\AddContextToContentRequest;
 use App\Http\Requests\ContentStatisticsRequest;
 use App\Http\Requests\ContentStatusRequest;
 use App\Http\Requests\DeepLinkingReturnRequest;
@@ -15,6 +17,7 @@ use App\Lti\ContentItemSelectionFactory;
 use App\Lti\LtiLaunchBuilder;
 use App\Models\Content;
 use App\Models\ContentVersion;
+use App\Models\Context;
 use App\Models\LtiPlatform;
 use App\Models\LtiTool;
 use App\Models\LtiToolExtra;
@@ -29,6 +32,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 use function assert;
 use function is_string;
@@ -62,7 +66,7 @@ class ContentController extends Controller
             'contents' => $request->paginateWithModel(
                 $query,
                 forUser: true,
-                showDrafts: true
+                showDrafts: true,
             ),
             'filter' => $request,
         ]);
@@ -70,7 +74,7 @@ class ContentController extends Controller
 
     public function details(Content $content, Request $request): View
     {
-        $version = $content->latestPublishedVersion()->firstOrFail();
+        $version = $content->getCachedLatestPublishedVersion() ?? throw new NotFoundHttpException();
         $this->authorize('view', [$content, $version]);
 
         $content->trackView($request, ContentViewSource::Detail);
@@ -96,10 +100,8 @@ class ContentController extends Controller
     {
         $content->trackView($request, ContentViewSource::Share);
 
-        $launch = $content
-            ->latestPublishedVersion()
-            ->firstOrFail()
-            ->toLtiLaunch();
+        $version = $content->getCachedLatestPublishedVersion() ?? throw new NotFoundHttpException();
+        $launch = $version->toLtiLaunch();
 
         return view('content.share', [
             'content' => $content,
@@ -107,14 +109,27 @@ class ContentController extends Controller
         ]);
     }
 
-    public function embed(Content $content, ContentVersion|null $version = null): View
+    public function shareDialog(Content $content, Request $request): View
     {
-        $version ??= $content->latestPublishedVersion()->firstOrFail();
+        if (!$request->header('HX-Request')) {
+            abort(400);
+        }
+
+        return view('content.hx-share-dialog', [
+            'content' => $content,
+        ]);
+    }
+
+    public function embed(Request $request, Content $content, ContentVersion|null $version = null): View
+    {
+        $version ??= $content->getCachedLatestPublishedVersion() ?? throw new NotFoundHttpException();
         $launch = $version->toLtiLaunch();
+
+        $content->trackView($request, ContentViewSource::Embed);
 
         return view('content.embed', [
             'content' => $content,
-            'version' => $content->latestPublishedVersion,
+            'version' => $version,
             'launch' => $launch,
         ]);
     }
@@ -145,17 +160,53 @@ class ContentController extends Controller
 
     public function roles(Content $content): View
     {
+        // @phpstan-ignore larastan.noUnnecessaryCollectionCall
+        $availableContexts = Context::all()
+            ->diff($content->contexts)
+            ->mapWithKeys(fn(Context $context) => [$context->id => $context->name]);
+
         return view('content.roles', [
             'content' => $content,
+            'available_contexts' => $availableContexts,
         ]);
+    }
+
+    public function addContext(Content $content, AddContextToContentRequest $request): RedirectResponse
+    {
+        $context = Context::where('id', $request->validated('context'))
+            ->firstOrFail();
+
+        $content->contexts()->attach($context);
+
+        return redirect()->back()
+            ->with('alert', trans('messages.context-added-to-content'));
+    }
+
+    public function removeContext(Content $content, Context $context): RedirectResponse
+    {
+        $content->contexts()->detach($context->id);
+
+        return redirect()->back()
+            ->with('alert', trans('messages.context-removed-from-content'));
     }
 
     public function create(): View
     {
         $tools = LtiTool::all();
 
+        /** @var LtiCreateInfo[] $info */
+        $info = [];
+
+        foreach ($tools as $type) {
+            $info[] = LtiCreateInfo::fromLtiTool($type);
+
+            foreach ($type->extras()->forAdmins(false)->get() as $extra) {
+                $info[] = LtiCreateInfo::fromLtiToolExtra($type, $extra);
+            }
+        }
+
         return view('content.create', [
-            'types' => $tools,
+            'types' => $info,
         ]);
     }
 
@@ -184,6 +235,7 @@ class ContentController extends Controller
             $tool,
             $launchUrl,
             route('content.lti-update', [$tool, $content, $version]),
+            $version,
         );
 
         return view('content.edit', [
@@ -191,6 +243,14 @@ class ContentController extends Controller
             'version' => $version,
             'launch' => $launch,
         ]);
+    }
+
+    public function publish(Content $content, ContentVersion $version, Request $request): Response
+    {
+        $version->published = true;
+        $version->save();
+
+        return redirect()->back()->with('alert', trans('messages.content-published-notice'));
     }
 
     public function updateStatus(Content $content, ContentStatusRequest $request): Response
@@ -215,14 +275,12 @@ class ContentController extends Controller
             ?? throw new BadMethodCallException('Not in LTI selection context');
         assert(is_string($returnUrl));
 
-        $credentials = LtiPlatform::where('key', $request->session()->get('lti.oauth_consumer_key'))
-            ->firstOrFail()
-            ->getOauth1Credentials();
+        $platform = LtiPlatform::where('key', $request->session()->get('lti.oauth_consumer_key'))->firstOrFail();
 
         $ltiRequest = $itemSelectionFactory->createItemSelection(
-            [$version->toLtiLinkItem()],
+            [$version->toLtiLinkItem($platform)],
             $returnUrl,
-            $credentials,
+            $platform->getOauth1Credentials(),
             $request->session()->get('lti.data'),
         );
 
@@ -287,7 +345,7 @@ class ContentController extends Controller
             $content = new Content();
             $content->saveQuietly();
             $content->users()->save($this->getUser(), [
-                'role' => ContentUserRole::Owner,
+                'role' => ContentRole::Owner,
             ]);
             $version = $content->createVersionFromLinkItem($item, $tool, $this->getUser());
 
@@ -397,9 +455,9 @@ class ContentController extends Controller
 
     public function layoutSwitch(): RedirectResponse
     {
-        match(Session::get('contentLayout', 'grid')) {
+        match (Session::get('contentLayout', 'grid')) {
             'grid' => Session::put('contentLayout', 'list'),
-            default => Session::put('contentLayout', 'grid')
+            default => Session::put('contentLayout', 'grid'),
         };
 
         return redirect()->back();
@@ -407,19 +465,23 @@ class ContentController extends Controller
 
     public function statistics(ContentStatisticsRequest $request, Content $content): View|JsonResponse
     {
-        $data = $request->getData($content);
+        $graph = $content->buildStatsGraph(
+            $request->getStartDate(),
+            $request->getEndDate(),
+        );
+        $resolution = $graph->inferResolution();
 
         if ($request->ajax()) {
             return response()->json([
-                'values' => $data,
-                'formats' => $request->getDateFormatsForResolution(),
+                'values' => $graph->getData($resolution),
+                'formats' => $request->getDateFormatsForResolution($resolution),
             ]);
         }
 
         return view('content.statistics', [
             'content' => $content,
             'graph' => [
-                'values' => $data,
+                'values' => $graph->getData($resolution),
                 'groups' => $request->dataGroups(),
                 'defaultHiddenGroups' => $request->dataGroups()->flip()->except(['total'])->keys(),
                 'texts' => [
@@ -434,8 +496,28 @@ class ContentController extends Controller
                     'loading' => trans('messages.loading'),
                     'loadingFailed' => trans('messages.chart-load-error'),
                 ],
-                'formats' => $request->getDateFormatsForResolution(),
+                'formats' => $request->getDateFormatsForResolution($resolution),
             ],
         ]);
+    }
+
+    /**
+     * @throws \App\Exceptions\ContentLockedException
+     */
+    public function refreshLock(Content $content, Request $request): Response
+    {
+        // no locking when making a copy
+        if (!$request->session()->get('lti.ext_edlib3_copy_before_save')) {
+            $content->refreshLock($this->getUser());
+        }
+
+        return response()->noContent();
+    }
+
+    public function releaseLock(Content $content): Response
+    {
+        $content->releaseLock($this->getUser());
+
+        return response()->noContent();
     }
 }

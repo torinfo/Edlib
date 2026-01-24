@@ -24,8 +24,7 @@ final class ContentVersionTransformer extends TransformerAbstract
     public function __construct(
         private readonly LtiToolTransformer $ltiToolTransformer,
         private readonly TagTransformer $tagTransformer,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -45,6 +44,7 @@ final class ContentVersionTransformer extends TransformerAbstract
             'published' => $version->published,
             'min_score' => $version->min_score,
             'max_score' => $version->max_score,
+            'displayed_content_type' => $version->displayed_content_type,
             'links' => [
                 'self' => route('api.contents.versions.show', [$version->content_id, $version->id]),
                 'content' => route('api.contents.show', [$version->content_id]),
@@ -66,7 +66,7 @@ final class ContentVersionTransformer extends TransformerAbstract
     {
         return $this->collection(
             $contentVersion->tags,
-            $this->tagTransformer
+            $this->tagTransformer,
         );
     }
 }

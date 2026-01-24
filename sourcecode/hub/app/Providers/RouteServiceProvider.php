@@ -12,6 +12,7 @@ use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvi
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
+use Laravel\Nightwatch\Http\Middleware\Sample;
 use RuntimeException;
 
 use function base_path;
@@ -44,12 +45,7 @@ class RouteServiceProvider extends ServiceProvider
                 ->firstOrFail();
         });
 
-        Route::bind('edlib2UsageContent', function (string $value): Content {
-            return Content::ofTag([
-                'prefix' => 'edlib2_usage_id',
-                'name' => $value,
-            ])->limit(1)->firstOrFail();
-        });
+        Route::bind('edlib2UsageContent', fn(string $value) => Content::firstWithEdlib2UsageIdOrFail($value));
 
         $this->configureRateLimiting();
 
@@ -61,7 +57,11 @@ class RouteServiceProvider extends ServiceProvider
 
             // must exist on all domains
             Route::middleware('stateless')
+                ->middleware(Sample::never())
                 ->get('/up', HealthController::class);
+
+            Route::middleware('stateless')
+                ->group(base_path('routes/edlib-legacy.php'));
 
             Route::middleware('ndla-legacy')
                 ->domain($ndlaLegacy->isEnabled() ? $ndlaLegacy->getDomain() : 'invalid.')

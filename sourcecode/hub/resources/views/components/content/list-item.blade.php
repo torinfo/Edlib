@@ -1,4 +1,4 @@
-@props(['content', 'titlePreviews' => false])
+@props(['content'])
 
 <article class="card content-list-item shadow-sm">
     <div class="card-body">
@@ -6,12 +6,10 @@
             <a
                 href="{{ $content->detailsUrl }}"
                 class="col text-decoration-none link-body-emphasis"
-                @if ($titlePreviews)
-                    hx-get="{{ $content->previewUrl }}"
-                    hx-target="#previewModal"
-                    data-bs-toggle="modal"
-                    data-bs-target="#previewModal"
-                @endif
+                hx-get="{{ $content->previewUrl }}"
+                hx-target="#modal-container"
+                hx-swap="beforeend"
+                data-modal="true"
             >
                 <h5 class="text-line-clamp clamp-3-lines fw-bold" aria-label="{{ trans('messages.title') }}">
                     {{ $content->title }}
@@ -22,12 +20,12 @@
                 {{ $content->users }}
             </div>
             <div class="col-2" aria-label="{{ trans('messages.language') }}">
-                {{ $content->languageIso639_3 }}
+                {{ $content->languageDisplayName ?: $content->languageIso639_3 }}
             </div>
             <div class="col-2" aria-label="{{ trans('messages.views') }}">
                 {{ $content->viewsCount }}
                 @if(!$content->isPublished)
-                    <div class="badge text-bg-primary position-absolute end-0 top-0 d-none d-md-inline-block">
+                    <div class="badge text-bg-primary fw-normal position-absolute end-0 top-0 draft-badge">
                         {{ trans('messages.draft') }}
                     </div>
                 @endif
@@ -40,6 +38,6 @@
         </div>
     </div>
     <div class="card-footer d-flex align-items-center justify-content-end border-0 action-buttons">
-        <x-content.action-buttons :$content :show-preview="!$titlePreviews" />
+        <x-content.action-buttons :$content />
     </div>
 </article>

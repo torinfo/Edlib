@@ -17,6 +17,9 @@ class StoreLtiToolRequest extends FormRequest
         if (!$parameters->get('slug')) {
             $parameters->remove('slug');
         }
+
+        $parameters->set('default_published', $parameters->getBoolean('default_published', false));
+        $parameters->set('default_shared', $parameters->getBoolean('default_shared', false));
     }
 
     /**
@@ -32,8 +35,9 @@ class StoreLtiToolRequest extends FormRequest
             'edit_mode' => ['required', Rule::enum(LtiToolEditMode::class)],
             'send_name' => ['boolean'],
             'send_email' => ['boolean'],
-            'proxy_launch' => ['boolean'],
             'slug' => ['sometimes', 'string', 'max:50', 'regex:/^[a-z0-9-_]+$/'],
+            'default_published' => ['boolean'],
+            'default_shared' => ['boolean'],
         ];
     }
 }

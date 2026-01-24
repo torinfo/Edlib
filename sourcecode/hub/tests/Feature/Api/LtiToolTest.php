@@ -29,20 +29,22 @@ final class LtiToolTest extends TestCase
         $this->getJson('/api/lti-tools/' . $tool->id)
             ->assertOk()
             ->assertJson(
-                fn (AssertableJson $json) => $json
+                fn(AssertableJson $json) => $json
                     ->has(
                         'data',
-                        fn (AssertableJson $json) => $json
+                        fn(AssertableJson $json) => $json
                             ->where('id', $tool->id)
                             ->where('consumer_key', $tool->consumer_key)
                             ->missing('consumer_secret')
                             ->where('deep_linking_url', $tool->creator_launch_url)
                             ->where('edit_mode', $tool->edit_mode->value)
-                            ->where('proxies_lti_launches', $tool->proxy_launch)
+                            ->where('proxies_lti_launches', true)
                             ->where('send_name', $tool->send_name)
                             ->where('send_email', $tool->send_email)
-                            ->where('links.self', 'https://hub-test.edlib.test/api/lti-tools/' . $tool->id)
-                    )
+                            ->where('default_published', $tool->default_published)
+                            ->where('default_shared', $tool->default_shared)
+                            ->where('links.self', 'https://hub-test.edlib.test/api/lti-tools/' . $tool->id),
+                    ),
             );
     }
 
@@ -53,10 +55,10 @@ final class LtiToolTest extends TestCase
         $this->getJson('/api/lti-tools')
             ->assertOk()
             ->assertJson(
-                fn (AssertableJson $json) => $json
+                fn(AssertableJson $json) => $json
                     ->has('data')
                     ->count('data', 1)
-                    ->has('meta')
+                    ->has('meta'),
             );
     }
 }

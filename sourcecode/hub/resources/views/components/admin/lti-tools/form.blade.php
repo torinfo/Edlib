@@ -48,18 +48,6 @@
     />
 
     <fieldset>
-        <legend>{{ trans('messages.launch-settings') }}</legend>
-
-        <x-form.field
-            name="proxy_launch"
-            type="checkbox"
-            :label="trans('messages.proxy-launch-to-lti-tool', ['site' => config('app.name')])"
-            :text="trans('messages.proxy-launch-to-lti-tool-help', ['site' => config('app.name')])"
-            :checked="$tool?->proxy_launch"
-        />
-    </fieldset>
-
-    <fieldset>
         <legend>{{ trans('messages.edit-mode') }}</legend>
 
         <x-form.field
@@ -96,6 +84,24 @@
             type="checkbox"
             :checked="$tool?->send_email ?? false"
             :label="trans('messages.send-email-to-lti-tool', ['site' => config('app.name')])"
+        />
+    </fieldset>
+
+    <fieldset>
+        <legend>{{ trans('messages.tool-settings') }}</legend>
+
+        <x-form.field
+            name="default_published"
+            type="checkbox"
+            :checked="$tool?->default_published"
+            :label="trans('messages.default-published-flag')"
+        />
+
+        <x-form.field
+            name="default_shared"
+            type="checkbox"
+            :checked="$tool?->default_shared"
+            :label="trans('messages.default-shared-flag')"
         />
     </fieldset>
 

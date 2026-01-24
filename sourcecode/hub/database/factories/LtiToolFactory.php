@@ -24,8 +24,9 @@ final class LtiToolFactory extends Factory
             'consumer_secret' => $this->faker->password(32),
             'send_name' => $this->faker->boolean,
             'send_email' => $this->faker->boolean,
-            'proxy_launch' => $this->faker->boolean,
             'slug' => $this->faker->unique()->slug(nbWords: 2),
+            'default_published' => $this->faker->boolean,
+            'default_shared' => $this->faker->boolean,
         ];
     }
 
@@ -49,11 +50,6 @@ final class LtiToolFactory extends Factory
         return $this->state(['send_email' => $sendEmail]);
     }
 
-    public function proxyLaunch(bool $proxyLaunch = true): self
-    {
-        return $this->state(['proxy_launch' => $proxyLaunch]);
-    }
-
     public function withName(string $name): self
     {
         return $this->state(['name' => $name]);
@@ -75,5 +71,15 @@ final class LtiToolFactory extends Factory
     public function editMode(LtiToolEditMode $editMode): self
     {
         return $this->state(['edit_mode' => $editMode]);
+    }
+
+    public function defaultPublished(bool $defaultPublished = true): self
+    {
+        return $this->state(['default_published' => $defaultPublished]);
+    }
+
+    public function defaultShared(bool $defaultShared = true): self
+    {
+        return $this->state(['default_shared' => $defaultShared]);
     }
 }

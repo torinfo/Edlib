@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\ContentLock;
+use App\AuditLog;
 use App\H5PContent;
 use App\H5PLibrary;
 use App\Http\Controllers\Controller;
@@ -10,6 +10,8 @@ use App\Libraries\H5P\AdminConfig;
 use App\Libraries\H5P\AjaxRequest;
 use App\Libraries\H5P\H5PLibraryAdmin;
 use App\Libraries\H5P\Interfaces\CerpusStorageInterface;
+use Illuminate\Cache\Repository as CacheRepository;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class AdminController extends Controller
@@ -22,8 +24,7 @@ class AdminController extends Controller
 
     public function index()
     {
-        $editLockCount = ContentLock::active()->get()->count();
-        return view('admin.index')->with(compact('editLockCount'));
+        return view('admin.index');
     }
 
     public function contentUpgrade(Request $request)
@@ -36,13 +37,13 @@ class AdminController extends Controller
         $libraries = H5PLibrary::withCount([
             'contents' => function ($query) {
                 H5PContent::noMaxScoreScope($query);
-            }
+            },
         ])
             ->groupBy('id')
             ->having('contents_count', ">", 0)
             ->orderBy('name')
             ->get()
-            ->filter(fn (H5PLibrary $library) => $library->supportsMaxScore());
+            ->filter(fn(H5PLibrary $library) => $library->supportsMaxScore());
 
         $config = resolve(AdminConfig::class);
         $config->addPresaveScripts();
@@ -82,5 +83,19 @@ class AdminController extends Controller
             "json" => response()->json($returnValue),
             default => $returnValue,
         };
+    }
+
+    public function clearCache(CacheRepository $cache): RedirectResponse
+    {
+        $cache->flush();
+
+        return redirect()->back()->with('message', trans('admin.cache-cleared'));
+    }
+
+    public function auditLog()
+    {
+        return view('admin.auditlog', [
+            'entries' => AuditLog::orderBy('id', 'desc')->paginate(50),
+        ]);
     }
 }

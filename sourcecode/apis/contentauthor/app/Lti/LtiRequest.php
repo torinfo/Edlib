@@ -42,7 +42,7 @@ class LtiRequest extends \Cerpus\EdlibResourceKit\Oauth1\Request
     {
         return $this->getUserFullName() ?: trim(
             ($this->getUserGivenName() ?? '') . ' ' .
-            ($this->getUserFamilyName() ?? '')
+            ($this->getUserFamilyName() ?? ''),
         ) ?: null;
     }
 
@@ -112,7 +112,7 @@ class LtiRequest extends \Cerpus\EdlibResourceKit\Oauth1\Request
             $this->getToolConsumerInfoProductFamilyCode(),
             $this->getExtContextId(),
             $this->getExtModuleId(),
-            $this->getExtActivityId()
+            $this->getExtActivityId(),
         ];
         return sha1(json_encode($keys));
     }
@@ -148,16 +148,6 @@ class LtiRequest extends \Cerpus\EdlibResourceKit\Oauth1\Request
         return $this->param('ext_behavior_settings');
     }
 
-    public function getExtEmbedId(): string|null
-    {
-        return $this->param('ext_embed_id');
-    }
-
-    public function getResourceLinkTitle(): string|null
-    {
-        return $this->param('resource_link_title');
-    }
-
     public function isAdministrator(): bool
     {
         $roles = explode(',', $this->param('roles') ?? '');
@@ -179,5 +169,25 @@ class LtiRequest extends \Cerpus\EdlibResourceKit\Oauth1\Request
     {
         $value = $this->param('ext_ca_enable_unsaved_warning');
         return $value !== null ? $value !== '0' : null;
+    }
+
+    public function getPublished(): bool|null
+    {
+        $value = $this->param('ext_edlib3_published');
+        if ($value !== null) {
+            $value = filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+        }
+
+        return $value;
+    }
+
+    public function getShared(): bool|null
+    {
+        $value = $this->param('ext_edlib3_shared');
+        if ($value !== null) {
+            $value = filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+        }
+
+        return $value;
     }
 }

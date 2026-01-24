@@ -15,7 +15,6 @@ RUN install-php-extensions \
         pcntl \
         pdo_mysql \
         redis \
-        xmlrpc \
         zip
 
 COPY --from=composer/composer:2-bin /composer /usr/local/bin/
@@ -25,7 +24,7 @@ ENV COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_HOME="/tmp" \
     COMPOSER_MEMORY_LIMIT=-1
 
-COPY docker/php.ini $PHP_INI_DIR/conf.d/99-custom.ini
+COPY docker/php/php.ini $PHP_INI_DIR/conf.d/99-custom.ini
 
 RUN echo "access.log = /dev/null" >> /usr/local/etc/php-fpm.d/www.conf;
 
@@ -78,7 +77,7 @@ COPY resources resources
 COPY routes routes
 COPY artisan .
 COPY .env.example .
-COPY --from=composer_deps /app/composer.json /app/composer.lock .
+COPY --from=composer_deps /app/composer.json /app/composer.lock ./
 COPY --from=composer_deps /app/vendor vendor
 COPY --from=frontend /app/public public
 
@@ -103,6 +102,8 @@ RUN set -eux; \
     cp -R /app/vendor/h5p/h5p-editor public/h5p-editor-php-library; \
     cp -R /app/vendor/h5p/h5p-core public/h5p-php-library; \
     chown -R www-data:www-data .
+
+COPY docker/php/fpm-prod.conf "/usr/local/etc/php-fpm.d/zz-fpm-prod.conf"
 
 
 FROM prod AS test
@@ -131,7 +132,9 @@ RUN set -eux; \
         xdebug \
     ;
 
-COPY docker/php/docker-entrypoint-dev.sh /docker-entrypoint-dev.sh
+COPY docker/php/docker-entrypoint-dev.sh /
+COPY docker/php/php-dev.ini "$PHP_INI_DIR/conf.d/zz-php-dev.ini"
+COPY docker/php/startup-dev.sh /usr/local/bin/
 
 ENTRYPOINT ["/docker-entrypoint-dev.sh"]
 
@@ -143,5 +146,5 @@ FROM nginx:1-alpine AS web
 ENV PHP_FPM_HOST "localhost:9000"
 
 COPY --from=prod /app/public /app/public
-COPY docker/no-security-theatre.conf /etc/nginx/conf.d/
-COPY docker/contentAuthor.conf.template /etc/nginx/templates/contentAuthor.conf.template
+COPY docker/nginx/no-security-theatre.conf /etc/nginx/conf.d/
+COPY docker/nginx/contentAuthor.conf.template /etc/nginx/templates/contentAuthor.conf.template

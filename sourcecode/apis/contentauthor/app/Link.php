@@ -104,11 +104,6 @@ class Link extends Content implements VersionableObject
         $this->version_id = $versionId;
     }
 
-    public function getIsPrivateAttribute(): false
-    {
-        return false; // Defaults to public / listed
-    }
-
     public function getUrl(): string
     {
         return route('link.show', [$this->id]);
@@ -117,12 +112,5 @@ class Link extends Content implements VersionableObject
     public function getMachineName(): string
     {
         return 'Link';
-    }
-
-    protected function getTags(): array
-    {
-        return [
-            'h5p:' . $this->getMachineName(),
-        ];
     }
 }

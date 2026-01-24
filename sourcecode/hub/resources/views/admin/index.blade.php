@@ -15,11 +15,36 @@
         </li>
 
         <li>
-            <x-form action="{{ route('admin.rebuild-content-index') }}">
-                <button class="btn btn-link p-0">{{ trans('messages.rebuild-content-index') }}</button>
-            </x-form>
+            <a href="{{ route('admin.contexts.index') }}">
+                {{ trans('messages.manage-contexts') }}
+            </a>
+        </li>
+
+        <li>
+            <a href="{{ route('admin.attach-context-to-contents') }}">
+                {{ trans('messages.attach-context-to-contents') }}
+            </a>
+        </li>
+
+        <li>
+            <a href="{{ route('admin.admins.index') }}">
+                {{ trans('messages.admins') }}
+            </a>
         </li>
     </ul>
+
+    <h3>{{ trans('messages.danger-zone') }}</h3>
+
+    <x-form
+        action="{{ route('admin.rebuild-content-index') }}"
+        class="mb-3"
+        hx-post="{{ route('admin.rebuild-content-index') }}"
+        hx-confirm="{{ trans('messages.confirm-reindex') }}"
+    >
+        <button class="btn btn-danger">
+            {{ trans('messages.rebuild-content-index') }}
+        </button>
+    </x-form>
 
     <h3>Admin tools</h3>
 
@@ -44,8 +69,12 @@
                         <td>{{ \App\Models\Content::onlyTrashed()->count() }}</td>
                     </tr>
                     <tr>
-                        <th>Users</th>
+                        <th scope="row">Users</th>
                         <td>{{ \App\Models\User::count() }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">{{ trans('messages.active-content-locks') }}</th>
+                        <td>{{ \App\Models\ContentLock::active()->count() }}</td>
                     </tr>
                 </tbody>
             </table>

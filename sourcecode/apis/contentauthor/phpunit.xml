@@ -20,6 +20,11 @@
             <directory>./tests/Unit</directory>
         </testsuite>
     </testsuites>
+    <groups>
+        <exclude>
+            <group>live_integration</group>
+        </exclude>
+    </groups>
     <php>
         <ini name="memory_limit" value="256M" />
         <server name="APP_ENV" value="testing" force="true"/>
@@ -34,7 +39,6 @@
         <server name="FEATURE_CONTENT_LOCKING" value="true"/>
         <server name="FEATURE_CONTEXT_COLLABORATION" value="true"/>
         <server name="FEATURE_COLLABORATION" value="true"/>
-        <server name="LICENSE_SITE" value="ContentAuthorTest"/>
         <server name="H5P_CONSUMER_KEY" value="h5p"/>
         <server name="H5P_CONSUMER_SECRET" value="secret2"/>
         <server name="H5P_TRANSLATOR" value="null" />
@@ -43,11 +47,11 @@
         <server name="MAIL_PRETEND" value="true"/>
         <server name="MAIL_DRIVER" value="log"/>
         <server name="H5P_VIDEO_ADAPTER_DELETEVIDEO" value="true"/>
-        <server name="FEATURE_ENABLE_USER_PUBLISH" value="false"/>
         <server name="FILESYSTEM_DRIVER" value="test"/>
         <server name="NDLA_H5P_VIDEO_ACCOUNT_ID" value="videoAccountId"/>
         <server name="H5P_VIDEO_ADAPTER" value="null"/>
         <server name="H5P_IMAGE_ADAPTER" value="null"/>
         <server name="H5P_AUDIO_ADAPTER" value="null"/>
+        <server name="H5P_DEVELOPMENT_MODE" value="false"/>
     </php>
 </phpunit>

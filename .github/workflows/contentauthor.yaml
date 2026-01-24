@@ -1,21 +1,23 @@
 name: Content Author
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - '.github/workflows/contentauthor.yaml'
-      - 'sourcecode/apis/contentauthor/**'
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - master
     paths:
-      - '.github/workflows/contentauthor.yaml'
-      - 'sourcecode/apis/contentauthor/**'
-  workflow_dispatch:
+      - ".github/workflows/contentauthor.yaml"
+      - "sourcecode/apis/contentauthor/**"
+  workflow_call:
+    inputs:
+      version:
+        description: "A version to release"
+        required: true
+        type: string
+      deploy:
+        description: "A version to release"
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -36,56 +38,9 @@ jobs:
       - name: Validate
         run: composer validate
 
-  php-cs-fixer:
-    if: github.ref != 'refs/heads/master'
-    needs: [composer-validate]
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.CERPUSBOT_SECRET }}
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: 8.3
-
-      - name: Manage php-cs-fixer cache
-        uses: actions/cache@v4
-        with:
-          path: sourcecode/apis/contentauthor/.php-cs-fixer.cache
-          key: ca-phpcsfixer-cache-${{ github.sha }}
-          restore-keys: ca-phpcsfixer-cache-
-
-      - name: Get Composer cache dir
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: ca-phpcsfixer-composer-${{ hashFiles('sourcecode/apis/contentauthor/tools/php-cs-fixer/composer.lock') }}
-          restore-keys: |
-            ca-phpcsfixer-composer-
-
-      - name: Install dependencies
-        run: composer install --working-dir=tools/php-cs-fixer --no-progress --prefer-dist
-
-      - name: Run php-cs-fixer
-        run: tools/php-cs-fixer/vendor/bin/php-cs-fixer fix --show-progress=none
-
-      - name: Commit fixed code
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: Run php-cs-fixer
-
   phpstan:
-    if: always()
-    needs: [php-cs-fixer]
+    if: "!inputs.deploy"
+    needs: [composer-validate]
     runs-on: ubuntu-22.04
 
     steps:
@@ -121,9 +76,9 @@ jobs:
             --memory-limit=512M
         working-directory: ${{ github.workspace }}
 
-  build_test_publish:
-    if: always()
-    needs: [php-cs-fixer]
+  test:
+    if: "!inputs.deploy"
+    needs: [composer-validate]
     runs-on: ubuntu-22.04
 
     steps:
@@ -166,12 +121,38 @@ jobs:
             vendor/bin/phpunit --coverage-clover /reports/coverage.xml
 
       - name: Upload coverage to Codecov
-        if: github.event_name == 'push' && github.ref != 'refs/heads/master'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: /tmp/coverage.xml
           context: sourcecode/apis/contentauthor
+
+  build_publish:
+    if: inputs.version && !inputs.deploy
+    needs: [test, phpstan]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: cerpusbot
+          password: ${{ secrets.CERPUSBOT_SECRET }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.arch }}-buildx-ca-${{ github.sha }}
+          restore-keys: |
+
+            ${{ runner.arch }}-buildx-ca-
+
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Gather Docker metadata for PHP image
         id: php_meta
@@ -180,13 +161,8 @@ jobs:
           images: |
             name=ghcr.io/cerpus/edlib-contentauthor
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }},prefix=php-
-            type=semver,pattern={{version}},prefix=php-
-            type=semver,pattern={{major}}.{{minor}},prefix=php-
-            type=semver,pattern={{major}},prefix=php-
-            type=ref,event=branch,prefix=php-
-            type=ref,event=pr,prefix=php-
-            type=sha,prefix=php-
+            type=raw,value=latest,prefix=php-
+            type=raw,value=${{ inputs.version }},prefix=php-
 
       - name: Build PHP image
         uses: docker/build-push-action@v5
@@ -194,7 +170,7 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           context: sourcecode/apis/contentauthor
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+          push: true
           target: prod
           tags: ${{ steps.php_meta.outputs.tags }}
 
@@ -205,13 +181,8 @@ jobs:
           images: |
             name=ghcr.io/cerpus/edlib-contentauthor
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }},prefix=web-
-            type=semver,pattern={{version}},prefix=web-
-            type=semver,pattern={{major}}.{{minor}},prefix=web-
-            type=semver,pattern={{major}},prefix=web-
-            type=ref,event=branch,prefix=web-
-            type=ref,event=pr,prefix=web-
-            type=sha,prefix=web-
+            type=raw,value=latest,prefix=web-
+            type=raw,value=${{ inputs.version }},prefix=web-
 
       - name: Build web image
         uses: docker/build-push-action@v5
@@ -219,7 +190,7 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           context: sourcecode/apis/contentauthor
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+          push: true
           target: web
           tags: ${{ steps.web_meta.outputs.tags }}
 
@@ -227,35 +198,3 @@ jobs:
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
-
-  deploy-eb:
-    name: Deploy CA to test environments
-    if: always() && needs.build_test_publish.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: [build_test_publish]
-    strategy:
-      matrix:
-        environment:
-          - test
-          - ndla_staging
-    environment: ${{ matrix.environment }}
-    concurrency: deploy-ca-${{ matrix.environment }}
-    runs-on: ubuntu-22.04
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-     - name: Checkout
-       uses: actions/checkout@v4
-
-     - name: Configure AWS Credentials
-       uses: aws-actions/configure-aws-credentials@v4
-       with:
-        role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-        aws-region: eu-west-1
-        role-duration-seconds: 3600
-        role-session-name: GithubCerpusDevDeploy
-     
-     - name: Re-deploy docker-compose on Elastic Beanstalk
-       run: |
-        aws elasticbeanstalk update-environment --environment-name ${{ vars.CA_ENVIRONMENT_NAME }} --version-label ${{ vars.CA_APPLICATION_VERSION }}

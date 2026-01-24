@@ -77,7 +77,7 @@ class Game extends Content implements VersionableObject
 
     public function getGameSettingsAttribute(string $gameSettings): Object
     {
-        return !empty($gameSettings) ? json_decode($gameSettings) : (object)[];
+        return !empty($gameSettings) ? json_decode($gameSettings) : (object) [];
     }
 
     /**
@@ -138,13 +138,6 @@ class Game extends Content implements VersionableObject
     public function getMachineName(): string
     {
         return 'Game';
-    }
-
-    protected function getTags(): array
-    {
-        return [
-            'h5p:' . $this->getMachineName(),
-        ];
     }
 
     public function getMaxScore(): int|null

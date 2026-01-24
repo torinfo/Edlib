@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\ContentRole;
 use App\Events\ContentVersionDeleting;
 use App\Events\ContentVersionSaving;
 use App\Lti\ContentItemSelectionFactory;
@@ -25,11 +26,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Session;
 
 use function app;
 use function assert;
 use function is_string;
+use function mb_strtolower;
 use function session;
 use function url;
 
@@ -80,9 +84,34 @@ class ContentVersion extends Model
         'saving' => ContentVersionSaving::class,
     ];
 
-    public function toLtiLinkItem(): EdlibLtiLinkItem
+    public static function booted(): void
+    {
+        // Clear parent content's version cache when versions are created, updated, or deleted
+        if (config('cache.content_versions.enabled')) {
+            static::saved(function (self $version) {
+                if ($version->content_id) {
+                    $version->content?->clearVersionCache();
+                }
+            });
+
+            static::deleted(function (self $version) {
+                if ($version->content_id) {
+                    $version->content?->clearVersionCache();
+                }
+            });
+        }
+    }
+
+    public function toLtiLinkItem(LtiPlatform $platform): EdlibLtiLinkItem
     {
         $iconUrl = $this->icon?->getUrl();
+        $ownerEmail = null;
+
+        if (Session::get('lti.ext_edlib3_include_owner_info') === '1' && $platform->authorizes_edit) {
+            $ownerEmail = $this->content?->users->first(
+                fn(User $user) => $user->getRelationValue('pivot')->role === ContentRole::Owner,
+            )?->email;
+        }
 
         return (new EdlibLtiLinkItem(
             title: $this->getTitle(),
@@ -96,6 +125,7 @@ class ContentVersion extends Model
             ->withLanguageIso639_3($this->language_iso_639_3)
             ->withLicense($this->license)
             ->withTags($this->getSerializedTags())
+            ->withOwnerEmail($ownerEmail)
         ;
     }
 
@@ -134,14 +164,17 @@ class ContentVersion extends Model
             ?? throw new BadMethodCallException('Not in LTI selection context');
         assert(is_string($returnUrl));
 
-        $credentials = LtiPlatform::where('key', session()->get('lti.oauth_consumer_key'))
-            ->firstOrFail()
-            ->getOauth1Credentials();
-
+        $platform = LtiPlatform::where('key', session()->get('lti.oauth_consumer_key'))->firstOrFail();
         $data = session()->get('lti.data');
 
-        return app()->make(ContentItemSelectionFactory::class)
-            ->createItemSelection([$this->toLtiLinkItem()], $returnUrl, $credentials, $data);
+        return app()
+            ->make(ContentItemSelectionFactory::class)
+            ->createItemSelection(
+                [$this->toLtiLinkItem($platform)],
+                $returnUrl,
+                $platform->getOauth1Credentials(),
+                $data,
+            );
     }
 
     /**
@@ -150,11 +183,6 @@ class ContentVersion extends Model
     public function getExternalLaunchUrl(): string
     {
         $content = $this->content ?? throw new DomainException('No content for version');
-        $tool = $this->tool ?? throw new DomainException('No tool for LTI resource');
-
-        if (!$tool->proxy_launch) {
-            return $this->lti_launch_url;
-        }
 
         if (session('lti.ext_edlib3_return_exact_version')) {
             return route('lti.content-version', [
@@ -239,22 +267,46 @@ class ContentVersion extends Model
     public function getSerializedTags(): array
     {
         return $this->tags->map(
-            fn (Tag $tag) => $tag->prefix !== ''
+            fn(Tag $tag) => $tag->prefix !== ''
             ? "{$tag->prefix}:{$tag->name}"
-            : $tag->name
+            : $tag->name,
         )
             ->toArray();
     }
 
-    public function getDisplayedContentType(): string
+    /**
+     * @param string[] $tags
+     */
+    public function handleSerializedTags(array $tags): void
     {
-        $tag = $this->tags()->where('prefix', 'h5p')->first();
+        foreach ($tags as $tag) {
+            // Could be used by REST API, not used by CA
+            if (str_starts_with($tag, 'h5p:')) {
+                $this->displayed_content_type = substr($tag, 4);
+            }
 
-        if ($tag) {
-            return $tag->pivot->verbatim_name ?? $tag->name;
+            $this->tags()->attach(Tag::findOrCreateFromString($tag), [
+                'verbatim_name' => Tag::extractVerbatimName($tag),
+            ]);
         }
+    }
 
-        return (string) $this->tool?->name;
+    public function getRawDisplayedContentType(): string|null
+    {
+        return $this->attributes['displayed_content_type'];
+    }
+
+    public function getDisplayedContentTypeAttribute(): string
+    {
+        return $this->attributes['displayed_content_type'] ?? $this->tool->name ?? '';
+    }
+
+    public function setDisplayedContentTypeAttribute(string|null $contentType): void
+    {
+        $this->attributes['displayed_content_type'] = $contentType;
+        $this->attributes['displayed_content_type_normalized'] = $contentType !== null
+            ? mb_strtolower($contentType, 'UTF-8')
+            : null;
     }
 
     public function givesScore(): bool
@@ -299,7 +351,7 @@ class ContentVersion extends Model
                 },
                 function ($query) {
                     $query->where('published', true);
-                }
+                },
             )
             ->whereNull('contents.deleted_at')
             ->pluck('language_iso_639_3');
@@ -317,7 +369,7 @@ class ContentVersion extends Model
         $fallBack = app()->getFallbackLocale();
 
         return $locales
-            ->mapWithKeys(fn (string $locale) => [$locale => locale_get_display_name($locale, $displayLocale) ?: (locale_get_display_name($locale, $fallBack) ?: $locale)])
+            ->mapWithKeys(fn(string $locale) => [$locale => locale_get_display_name($locale, $displayLocale) ?: (locale_get_display_name($locale, $fallBack) ?: $locale)])
             ->sort();
     }
 

@@ -55,34 +55,14 @@ interface H5PAdapterInterface
     /**
      * @return boolean
      */
-    public function getDefaultImportPrivacy();
-
-    /**
-     * @return boolean
-     */
     public function adapterIs($adapter);
 
     public function useEmbedLink(): int;
-
-    /** @return bool */
-    public function emptyArticleImportLog($sessionKey): void;
-
-    /** @return bool */
-    public function resetNdlaIdTracking($sessionKey): void;
-
-
-    public function showArticleImportExportFunctionality(): bool;
-
-
-    public function runPresaveCommand(): void;
 
     public static function getCoreExtraTags(): array;
 
     /** @return void */
     public function setConfig(ConfigInterface $config);
-
-    public function isUserPublishEnabled(): bool;
-
 
     public function enableEverybodyIsCollaborators(): bool;
 
@@ -93,4 +73,6 @@ interface H5PAdapterInterface
     public function getConfigJs(): array;
 
     public function getCustomEditorStyles(): array;
+
+    public function filterEditorScripts(): array;
 }

@@ -14,7 +14,6 @@ use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
@@ -30,11 +29,9 @@ use const ENT_QUOTES;
  * @property Carbon $created_at
  * @property Carbon $updated_at
  * @property string $title
- * @property bool $is_private
  * @property string|null $version_id
  * @property int|null $max_score
  * @property int $bulk_calculated
- * @property bool $is_published
  * @property string $license
  * @property string $node_id
  * @property Collection $collaborators
@@ -63,20 +60,13 @@ abstract class Content extends Model
     // HasLicense / Licenseable
     // HasCollaborators / Collaboratable(?)
     // HasVersions / Versionable
-    // HasLocks / Lockable
 
     public string $userColumn = 'user_id';
     private string $versionColumn = 'version_id';
     public string $editRouteName;
 
     protected $casts = [
-        'is_private' => 'boolean',
-        'is_published' => 'boolean',
         'is_draft' => 'boolean',
-    ];
-
-    protected $attributes = [
-        'is_private' => false,
     ];
 
     public const RESOURCE_TYPE_CSS = '%s-resource';
@@ -97,6 +87,11 @@ abstract class Content extends Model
     abstract public function getUrl(): string;
 
     abstract public function getMachineName(): string;
+
+    public function getMachineDisplayName(): string
+    {
+        return $this->getMachineName();
+    }
 
     public function getTitleCleanAttribute(): string|null
     {
@@ -128,14 +123,6 @@ abstract class Content extends Model
     public function isCopyable(): bool
     {
         return License::isContentCopyable($this->license);
-    }
-
-    /**
-     * @return HasMany<ContentLock, $this>
-     */
-    public function locks(): HasMany
-    {
-        return $this->hasMany(ContentLock::class, 'content_id');
     }
 
     public function isCollaborator(): bool
@@ -270,21 +257,6 @@ abstract class Content extends Model
         return $title || $content || $license;
     }
 
-    public function hasLock()
-    {
-        return (new ContentLock())->hasLock($this->id);
-    }
-
-    public function lock()
-    {
-        (new ContentLock())->lock($this->id);
-    }
-
-    public function unlock()
-    {
-        (new ContentLock())->unlock($this->id);
-    }
-
     /**
      * @param Builder<self> $query
      */
@@ -325,54 +297,14 @@ abstract class Content extends Model
         return $id;
     }
 
-    /**
-     * The reason we have this function is that the isPublished function only returns the db value.
-     * We need a way to evaluate if a resource actually is published by using both the isPublished and isDraft flags
-     */
-    public function isActuallyPublished(): bool
-    {
-        return $this->isPublished() && !$this->isDraft();
-    }
-
-    public function isPublished(): bool
-    {
-        return $this->is_published;
-    }
-
-    public function isListed(): bool
-    {
-        return !$this->is_private;
-    }
-
     public function isDraft(): bool
     {
         return $this->is_draft;
     }
 
-    public static function isUserPublishEnabled(): bool
-    {
-        /** @var H5PAdapterInterface $adapter */
-        $adapter = app(H5PAdapterInterface::class);
-        return $adapter->isUserPublishEnabled();
-    }
-
     public function canList(Request $request): bool
     {
-        if (!self::isUserPublishEnabled() || !$this->exists) {
-            return true;
-        }
-
-        $authId = $request->session()->get('authId') ?? false;
-        return $this->isOwner($authId) || $this->isCollaborator() || $this->isExternalCollaborator($authId);
-    }
-
-    public function canPublish(Request $request): bool
-    {
-        if (self::isUserPublishEnabled() || !$this->exists || ($request->importRequest ?? false)) {
-            return true;
-        }
-
-        return $this->canList($request) || $this->isCopyable();
+        return true;
     }
 
     /**
@@ -441,6 +373,7 @@ abstract class Content extends Model
             url: $this->getUrl(),
             title: $this->title_clean,
             machineName: $this->getMachineName(),
+            machineDisplayName: $this->getMachineDisplayName(),
             hasScore: ($this->getMaxScore() ?? 0) > 0,
             editUrl: $this->getEditUrl(),
             titleHtml: $this->title,

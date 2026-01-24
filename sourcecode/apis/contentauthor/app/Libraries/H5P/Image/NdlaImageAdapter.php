@@ -24,8 +24,8 @@ final class NdlaImageAdapter implements H5PImageInterface, H5PExternalProviderIn
     public function __construct(
         private readonly NdlaImageClient $client,
         private readonly CerpusStorageInterface $storage,
-    ) {
-    }
+        private readonly string $url,
+    ) {}
 
     public function mapParams($params, $originalKeys = false)
     {
@@ -55,7 +55,7 @@ final class NdlaImageAdapter implements H5PImageInterface, H5PExternalProviderIn
 
     private function getImageUrl($path, $requestParameters)
     {
-        return config('ndla.image.url') . $path . "?" . http_build_query($requestParameters);
+        return $this->url . $path . "?" . http_build_query($requestParameters);
     }
 
     public function isTargetType($mimeType, $pathToFile): bool
@@ -65,7 +65,7 @@ final class NdlaImageAdapter implements H5PImageInterface, H5PExternalProviderIn
 
     private function isSameDomain($pathToFile): bool
     {
-        return str_starts_with($pathToFile, config('h5p.image.url'));
+        return str_starts_with($pathToFile, $this->url);
     }
 
     private function isImageMime($mime): bool
@@ -82,7 +82,7 @@ final class NdlaImageAdapter implements H5PImageInterface, H5PExternalProviderIn
         $source = $values['path'];
         $tempFile = tempnam(sys_get_temp_dir(), 'h5p-');
         $this->client->get($source, [
-            'sink' => $tempFile
+            'sink' => $tempFile,
         ]);
         $file = new File($tempFile);
         $extension = $file->guessExtension();
@@ -131,16 +131,6 @@ final class NdlaImageAdapter implements H5PImageInterface, H5PExternalProviderIn
         return $imageProperties;
     }
 
-    public static function getClientDetailsUrl(): ?string
-    {
-        $url = config('ndla.image.url');
-        if ($url !== null) {
-            return $url . '/image-api/v3/images';
-        }
-
-        return null;
-    }
-
     public function getViewCss(): array
     {
         return [];
@@ -166,5 +156,18 @@ final class NdlaImageAdapter implements H5PImageInterface, H5PExternalProviderIn
     public function getConfigJs(): array
     {
         return [];
+    }
+
+    public function getBrowserConfig(): array
+    {
+        return [
+            'searchUrl' => rtrim($this->url, '/') . '/image-api/v3/images',
+            'detailsUrl' => rtrim($this->url, '/') . '/image-api/v3/images',
+            'searchParams' => [
+                'fallback' => config('ndla.image.searchparams.fallback'),
+                'license' => config('ndla.image.searchparams.license'),
+                'page-size' => config('ndla.image.searchparams.pagesize'),
+            ],
+        ];
     }
 }

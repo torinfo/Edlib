@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\AdminsController;
+use App\Http\Controllers\Admin\ContextController;
 use App\Http\Controllers\Admin\LtiPlatformController;
 use App\Http\Controllers\Admin\LtiToolController;
 use App\Http\Controllers\ContentController;
@@ -14,9 +16,13 @@ use App\Http\Controllers\LtiSample\DeepLinkController;
 use App\Http\Controllers\SocialController;
 use App\Http\Controllers\UserController;
 use App\Http\Middleware\EnsureFrameCookies;
+use App\Http\Middleware\LockContent;
 use App\Http\Middleware\LtiSessionRequired;
 use App\Http\Middleware\LtiValidatedRequest;
+use App\Http\Middleware\LaunchCreateIfSingleTool;
+use App\Http\Middleware\SetsLocaleFromQuery;
 use App\Http\Middleware\StartScopedLtiSession;
+use App\Models\Content;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
@@ -65,6 +71,13 @@ Route::controller(ContentController::class)->group(function () {
         ->whereUlid('content')
         ->can('view', 'content');
 
+    Route::patch('/content/{content}/version/{version}/publish')
+        ->name('content.publish-version')
+        ->uses([ContentController::class, 'publish'])
+        ->whereUlid(['content', 'version'])
+        ->can('edit', ['content'])
+        ->scopeBindings();
+
     Route::patch('/content/{content}/status')
         ->uses([ContentController::class, 'updateStatus'])
         ->name('content.update-status')
@@ -74,6 +87,12 @@ Route::controller(ContentController::class)->group(function () {
     Route::get('/c/{content}')
         ->uses([ContentController::class, 'share'])
         ->name('content.share')
+        ->whereUlid('content')
+        ->can('view', 'content');
+
+    Route::get('/content/{content}/share-dialog')
+        ->uses([ContentController::class, 'shareDialog'])
+        ->name('content.share-dialog')
         ->whereUlid('content')
         ->can('view', 'content');
 
@@ -88,6 +107,18 @@ Route::controller(ContentController::class)->group(function () {
         ->name('content.roles')
         ->whereUlid(['content'])
         ->can('edit', ['content']);
+
+    Route::post('/content/{content}/roles/add-context')
+        ->uses([ContentController::class, 'addContext'])
+        ->name('content.add-context')
+        ->whereUlid(['content'])
+        ->can('manage-roles', ['content']);
+
+    Route::delete('/content/{content}/roles/{role}')
+        ->uses([ContentController::class, 'removeContext'])
+        ->name('content.remove-context')
+        ->can('manage-roles', ['content'])
+        ->scopeBindings();
 
     Route::get('/content/{content}/statistics')
         ->name('content.statistics')
@@ -111,20 +142,22 @@ Route::controller(ContentController::class)->group(function () {
 
     Route::get('/content/{content}/embed')
         ->uses([ContentController::class, 'embed'])
+        ->middleware([SetsLocaleFromQuery::class])
         ->name('content.embed')
         ->can('view', 'content')
         ->whereUlid('content');
 
     Route::get('/content/{content}/version/{version}/embed')
         ->uses([ContentController::class, 'embed'])
+        ->middleware([SetsLocaleFromQuery::class])
         ->name('content.embed-version')
         ->can('view', ['content', 'version'])
         ->whereUlid(['content', 'version'])
         ->scopeBindings();
 
     Route::get('/content/create', 'create')
-        ->middleware('auth')
-        ->can('create', \App\Models\Content::class)
+        ->middleware(['auth', LaunchCreateIfSingleTool::class])
+        ->can('create', Content::class)
         ->name('content.create');
 
     Route::post('/content/{content}/copy')
@@ -134,6 +167,7 @@ Route::controller(ContentController::class)->group(function () {
 
     Route::get('/content/{content}/version/{version}/edit')
         ->uses([ContentController::class, 'edit'])
+        ->middleware(['auth', LockContent::class])
         ->name('content.edit')
         ->can('edit', ['content', 'version'])
         ->whereUlid(['content', 'version'])
@@ -155,9 +189,21 @@ Route::controller(ContentController::class)->group(function () {
     Route::get('/content/create/{tool:slug}/{extra:slug?}', 'launchCreator')
         ->uses([ContentController::class, 'launchCreator'])
         ->name('content.launch-creator')
-        ->can('create', \App\Models\Content::class)
+        ->can('create', Content::class)
         ->can('launchCreator', ['tool', 'extra'])
         ->scopeBindings();
+
+    Route::put('/content/{content}/lock')
+        ->uses([ContentController::class, 'refreshLock'])
+        ->name('content.refresh-lock')
+        ->can('edit', 'content')
+        ->whereUlid('content');
+
+    Route::post('/content/{content}/release-lock')
+        ->uses([ContentController::class, 'releaseLock'])
+        ->name('content.release-lock')
+        ->can('edit', 'content')
+        ->whereUlid('content');
 });
 
 Route::prefix('/lti/dl')->middleware([
@@ -167,7 +213,7 @@ Route::prefix('/lti/dl')->middleware([
     Route::post('/tool/{tool}/content/create')
         ->uses([ContentController::class, 'ltiStore'])
         ->name('content.lti-store')
-        ->can('create', \App\Models\Content::class)
+        ->can('create', Content::class)
         ->whereUlid('tool');
 
     Route::post('/tool/{tool}/content/{content}/version/{version}/update')
@@ -194,7 +240,8 @@ Route::prefix('/lti')->middleware([
         ->scopeBindings();
 
     Route::post('/content/by-edlib2-usage/{edlib2UsageContent}')
-        ->uses([LtiController::class, 'content']);
+        ->uses([LtiController::class, 'content'])
+        ->whereUuid('edlib2UsageContent');
 
     Route::post('/dl')
         ->uses([LtiController::class, 'select'])
@@ -205,6 +252,16 @@ Route::prefix('/lti')->middleware([
         ->uses([LtiController::class, 'select'])
         ->middleware('lti.launch-type:ContentItemSelectionRequest');
 });
+
+Route::post('/send-verification-email')
+    ->uses([UserController::class, 'sendVerificationEmail'])
+    ->name('user.send-verification-email')
+    ->middleware(['auth']);
+
+Route::get('/verify-email')
+    ->uses([UserController::class, 'verifyEmail'])
+    ->name('user.verify-email')
+    ->middleware(['signed', 'auth']);
 
 Route::controller(UserController::class)->group(function () {
     Route::middleware('can:register')->group(function () {
@@ -243,6 +300,33 @@ Route::middleware('can:admin')->prefix('/admin')->group(function () {
     Route::post('/rebuild-content-index', [AdminController::class, 'rebuildContentIndex'])
         ->name('admin.rebuild-content-index');
 
+    Route::get('/admins')
+        ->uses([AdminsController::class, 'index'])
+        ->name('admin.admins.index');
+
+    Route::post('/admins')
+        ->uses([AdminsController::class, 'add'])
+        ->name('admin.admins.add');
+
+    Route::delete('/admins/{user}')
+        ->uses([AdminsController::class, 'remove'])
+        ->name('admin.admins.remove');
+
+    Route::get('/contexts')
+        ->uses([ContextController::class, 'index'])
+        ->name('admin.contexts.index');
+
+    Route::post('/contexts')
+        ->uses([ContextController::class, 'add'])
+        ->name('admin.contexts.add');
+
+    Route::get('/attach-context-to-contents')
+        ->uses([ContextController::class, 'attachToContents'])
+        ->name('admin.attach-context-to-contents');
+
+    Route::post('/attach-context-to-contents')
+        ->uses([ContextController::class, 'performAttachToContents']);
+
     Route::prefix('/lti-platforms')->group(function () {
         Route::get('')
             ->uses([LtiPlatformController::class, 'index'])
@@ -255,6 +339,16 @@ Route::middleware('can:admin')->prefix('/admin')->group(function () {
         Route::get('/{platform}/edit')
             ->uses([LtiPlatformController::class, 'edit'])
             ->name('admin.lti-platforms.edit')
+            ->can('edit', ['platform']);
+
+        Route::get('/{platform}/contexts')
+            ->uses([LtiPlatformController::class, 'contexts'])
+            ->name('admin.lti-platforms.contexts')
+            ->can('edit', ['platform']);
+
+        Route::put('/{platform}/contexts')
+            ->uses([LtiPlatformController::class, 'addContext'])
+            ->name('admin.lti-platforms.add-context')
             ->can('edit', ['platform']);
 
         Route::patch('/{platform}')

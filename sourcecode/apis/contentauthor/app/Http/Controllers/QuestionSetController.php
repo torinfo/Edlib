@@ -9,8 +9,8 @@ use App\Libraries\DataObjects\EditorConfigObject;
 use App\Libraries\DataObjects\QuestionSetStateDataObject;
 use App\Libraries\DataObjects\ResourceInfoDataObject;
 use App\Libraries\Games\Millionaire\Millionaire;
-use App\Libraries\H5P\Interfaces\H5PAdapterInterface;
 use App\Libraries\QuestionSet\QuestionSetHandler;
+use App\Lti\Lti;
 use App\QuestionSet;
 use App\SessionKeys;
 use App\Traits\FractalTransformer;
@@ -23,14 +23,14 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Session;
 use Illuminate\View\View;
 
-use function Cerpus\Helper\Helpers\profile as config;
+use function config;
 
 class QuestionSetController extends Controller
 {
     use ReturnToCore;
     use FractalTransformer;
 
-    public function __construct()
+    public function __construct(private readonly Lti $lti)
     {
         $this->middleware('lti.question-set')->only(['create']);
     }
@@ -50,28 +50,27 @@ class QuestionSetController extends Controller
 
     public function create(Request $request): View
     {
+        $ltiRequest = $this->lti->getRequest($request);
         $emails = '';
         $contenttypes = $this->getQuestionsetContentTypes();
         $extQuestionSetData = Session::get(SessionKeys::EXT_QUESTION_SET, null);
         Session::forget(SessionKeys::EXT_QUESTION_SET);
 
         $editorSetup = EditorConfigObject::create([
-            'userPublishEnabled' => true,
-            'canPublish' => true,
             'canList' => true,
             'useLicense' => config('feature.licensing') === true || config('feature.licensing') === '1',
             'editorLanguage' => Session::get('locale', config('app.fallback_locale')),
         ])->toJson();
 
         $state = QuestionSetStateDataObject::create([
-            'links' => (object)[
-                "store" => route('questionset.store')
+            'links' => (object) [
+                "store" => route('questionset.store'),
             ],
             'questionSetJsonData' => $extQuestionSetData,
             'contentTypes' => $contenttypes,
             'license' => License::getDefaultLicense(),
-            'isPublished' => false,
-            'share' => config('h5p.defaultShareSetting'),
+            'isPublished' => $ltiRequest?->getPublished() ?? false,
+            'isShared' => $ltiRequest?->getShared() ?? false,
             'redirectToken' => $request->get('redirectToken'),
             'route' => route('questionset.store'),
             '_method' => "POST",
@@ -94,16 +93,23 @@ class QuestionSetController extends Controller
         $questionsetHandler = app(QuestionSetHandler::class);
         $questionSet = $questionsetHandler->store($questionsetData, $request);
 
-        $url = $this->getRedirectToCoreUrl($questionSet->toLtiContent(), $request->get('redirectToken'));
+        $url = $this->getRedirectToCoreUrl(
+            $questionSet->toLtiContent(
+                published: $request->validated('isPublished'),
+                shared: $request->validated('isShared'),
+            ),
+            $request->get('redirectToken'),
+        );
 
         return response()->json(['url' => $url], Response::HTTP_CREATED);
     }
 
     public function edit(Request $request, $id): View
     {
+        $ltiRequest = $this->lti->getRequest($request);
         $questionset = QuestionSet::findOrFail($id);
 
-        $links = (object)[
+        $links = (object) [
             "store" => route('questionset.store'),
             "self" => route('questionset.update', [
                 'questionset' => $questionset->id,
@@ -115,12 +121,7 @@ class QuestionSetController extends Controller
         $contenttypes = $this->getQuestionsetContentTypes();
         $emails = $questionset->getCollaboratorEmails();
 
-        /** @var H5PAdapterInterface $adapter */
-        $adapter = app(H5PAdapterInterface::class);
-
         $editorSetup = EditorConfigObject::create([
-            'userPublishEnabled' => $adapter->isUserPublishEnabled(),
-            'canPublish' => $questionset->canPublish($request),
             'canList' => $questionset->canList($request),
             'useLicense' => config('feature.licensing') === true || config('feature.licensing') === '1',
             'editorLanguage' => Session::get('locale', config('app.fallback_locale')),
@@ -137,9 +138,9 @@ class QuestionSetController extends Controller
             'id' => $questionset->id,
             'title' => $questionset->title,
             'license' => $questionset->license,
-            'isPublished' => $questionset->isPublished(),
+            'isPublished' => $ltiRequest?->getPublished() ?? false,
             'isDraft' => $questionset->isDraft(),
-            'share' => !$questionset->isListed() ? 'private' : 'share',
+            'isShared' => $ltiRequest?->getShared() ?? false,
             'redirectToken' => $request->get('redirectToken'),
             'route' => route('questionset.update', ['questionset' => $id]),
             '_method' => "PUT",
@@ -152,12 +153,13 @@ class QuestionSetController extends Controller
             'emails',
             'emails',
             'state',
-            'editorSetup'
+            'editorSetup',
         ]));
     }
 
     public function update(ApiQuestionsetRequest $request, QuestionSet $questionset)
     {
+        $ltiRequest = $this->lti->getRequest($request);
         $questionsetData = json_decode($request->get('questionSetJsonData'), true);
 
         /** @var QuestionSetHandler $questionsetHandler */
@@ -165,10 +167,13 @@ class QuestionSetController extends Controller
         $questionSet = $questionsetHandler->update(
             $questionset,
             $questionsetData,
-            $request
+            $request,
         );
 
-        $url = $this->getRedirectToCoreUrl($questionSet->toLtiContent(), $request->get('redirectToken'));
+        $url = $this->getRedirectToCoreUrl($questionSet->toLtiContent(
+            published: $ltiRequest?->getPublished() ?? false,
+            shared: $ltiRequest?->getShared() ?? false,
+        ), $request->get('redirectToken'));
 
         return response()->json(['url' => $url], Response::HTTP_OK);
     }

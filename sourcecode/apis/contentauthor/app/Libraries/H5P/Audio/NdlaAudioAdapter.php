@@ -15,8 +15,7 @@ final readonly class NdlaAudioAdapter implements H5PAudioInterface, H5PExternalP
         private NdlaAudioClient $client,
         private CerpusStorageInterface $storage,
         private string $url,
-    ) {
-    }
+    ) {}
 
     public function isTargetType($mimeType, $pathToFile): bool
     {
@@ -25,8 +24,7 @@ final readonly class NdlaAudioAdapter implements H5PAudioInterface, H5PExternalP
 
     private function isSameDomain($pathToFile): bool
     {
-        $url = config('h5p.audio.url') ?: config('h5p.image.url');
-        return str_starts_with($pathToFile, $url);
+        return str_starts_with($pathToFile, $this->url);
     }
 
     private function isAudioMime($mime): bool
@@ -39,7 +37,7 @@ final readonly class NdlaAudioAdapter implements H5PAudioInterface, H5PExternalP
         $source = $values['path'];
         $tempFile = tempnam(sys_get_temp_dir(), 'h5p-');
         $this->client->get($source, [
-            'sink' => $tempFile
+            'sink' => $tempFile,
         ]);
         $file = new File($tempFile);
         $extension = $file->guessExtension();
@@ -92,5 +90,18 @@ final readonly class NdlaAudioAdapter implements H5PAudioInterface, H5PExternalP
     public function getConfigJs(): array
     {
         return [];
+    }
+
+    public function getBrowserConfig(): array
+    {
+        return [
+            'searchUrl' => rtrim($this->url, '/') . '/audio-api/v1/audio',
+            'detailsUrl' => rtrim($this->url, '/') . '/audio-api/v1/audio',
+            'searchParams' => [
+                'fallback' => config('ndla.audio.searchparams.fallback'),
+                'license' => config('ndla.audio.searchparams.license'),
+                'page-size' => config('ndla.audio.searchparams.pagesize'),
+            ],
+        ];
     }
 }

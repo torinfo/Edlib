@@ -3,7 +3,6 @@
 return [
     'feature' => [
         'licensing' => env('NDLA_FEATURE_LICENSING', false),
-        'content-locking' => env('NDLA_FEATURE_CONTENT_LOCKING', true),
         'context-collaboration' => env('NDLA_FEATURE_CONTEXT_COLLABORATION', false),
         'collaboration' => env('NDLA_FEATURE_COLLABORATION', false),
         'export_h5p_on_save' => env('NDLA_FEATURE_EXPORT_H5P_ON_SAVE', false),
@@ -12,9 +11,6 @@ return [
     'app' => [
         'enable_licensing' => env('NDLA_ENABLE_LICENSING', false),
         'displayPropertiesBox' => env('NDLA_H5P_DISPLAY_PROPERTIES_BOX', true),
-    ],
-    'ndla' => [
-        'userId'  => env('NDLA_IMPORT_USERID', 'fake-import-id'),
     ],
     'h5p' => [
         'H5P_DragQuestion' => [
@@ -33,9 +29,9 @@ return [
         'h5pAdapter' => 'ndla',
         'video' => [
             'enable' => env("NDLA_H5P_VIDEO_STREAM_ENABLED", true),
-            'deleteVideoSourceAfterConvertToStream' => (bool)env("NDLA_H5P_VIDEO_ADAPTER_DELETEVIDEO", false),
+            'deleteVideoSourceAfterConvertToStream' => (bool) env("NDLA_H5P_VIDEO_ADAPTER_DELETEVIDEO", false),
             'pingDelay' => env("NDLA_H5P_VIDEO_DELAY", 10),
         ],
         'saveFrequency' => env('NDLA_H5P_SAVE_FREQUENCY', false),
-    ]
+    ],
 ];
