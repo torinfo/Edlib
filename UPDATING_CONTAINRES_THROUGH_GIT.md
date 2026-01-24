@@ -45,7 +45,7 @@ Updating CA
    npm install
    npm run build
    ```
-11. Restart the Hub container (not strictly necessary)
+12. Restart the Hub container (not strictly necessary)
 
 ## Updating CA
 1. Make sure you have a backup of the code and the database
@@ -83,3 +83,4 @@ Updating CA
    npm install
    npm run prod
    ```
+11. Restart the Hub container (not strictly necessary)
